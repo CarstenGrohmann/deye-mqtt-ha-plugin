@@ -1,0 +1,4 @@
+[submodule "deye-inverter-mqtt"]
+	path = deye-inverter-mqtt
+	url = https://github.com/kbialek/deye-inverter-mqtt.git
+	branch = main
