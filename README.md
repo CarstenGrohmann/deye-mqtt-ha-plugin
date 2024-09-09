@@ -2,7 +2,8 @@
 
 ## Introduction
 
-This plugin provides a Home Assistant integration for all data published by the "Deye solar inverter MQTT bridge".
+This plugin enables Home Assistant to automatically discover all values published by the "Deye Solar Inverter
+MQTT Bridge".
 
 Energy usage diagram provided by Home Assistant filled with data from a "Deye solar inverter MQTT bridge":
 
@@ -12,7 +13,7 @@ Energy usage diagram provided by Home Assistant filled with data from a "Deye so
 
 1. Install Deye solar inverter MQTT bridge
 
-2. Extend the Deye solar inverter MQTT bridge configuration file `config.env` like described in this example:
+2. Extend the Deye solar inverter MQTT bridge configuration file `config.env` as described in this example:
 
     ```bash
     # Home Assistant Integration
@@ -37,13 +38,13 @@ Energy usage diagram provided by Home Assistant filled with data from a "Deye so
     # Example configuration.yaml entry
     utility_meter:
       energy:
-        name: "Production today (daily reset)"
-        source: sensor.deye_inverter_mqtt_production_today
+        name: "Production total (daily reset)"
+        source: sensor.deye_inverter_mqtt_production_total
         cycle: daily
     ```
-   
+
     or graphically 
- 
+
     ![Screenshot of Utility Meter setup part 1](./screenshot_setup_utility_meter_1.png)
 
     ![Screenshot of Utility Meter setup part 2](./screenshot_setup_utility_meter_2.png)
@@ -51,6 +52,19 @@ Energy usage diagram provided by Home Assistant filled with data from a "Deye so
 ## Requirements
 
 * [Deye solar inverter MQTT bridge](https://github.com/kbialek/deye-inverter-mqtt) 2024.07.1
+
+## Troubleshooting
+
+1. Check log of the deye-mqtt container for errors.
+
+    ```bash
+    docker logs deye-mqtt
+    ```
+
+   On demand increase the detail of the logging in `config.env` to `LOG_LEVEL=DEBUG` and restart the container.
+
+2. Checking the content published in the MQTT broker. You can use a graphical tool such as the [MQTT Explorer](https://mqtt-explorer.com/) for this.
+
 
 ## Resources
 
