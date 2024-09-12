@@ -162,12 +162,9 @@ class DeyeHADiscovery(DeyeEventProcessor):
         """Return state_class based on a given topic"""
         # topic: day_energy
         # topic: dc/pv*/day_energy
-        if topic.endswith("day_energy"):
-            state_class = "total"
-
-        # topic: total_energy
         # topic: dc/pv*/total_energy
-        elif topic.endswith("total_energy"):
+        # topic: total_energy
+        if topic.endswith("_energy"):
             state_class = "total_increasing"
 
         elif topic == "uptime":
