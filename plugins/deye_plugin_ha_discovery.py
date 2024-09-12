@@ -18,6 +18,7 @@
 # Copyright (c) 2024 Carsten Grohmann
 
 import fnmatch
+import functools
 import json
 import logging
 
@@ -112,6 +113,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
         return ret
 
     @staticmethod
+    @functools.cache
     def _get_device_class(topic: str) -> str:
         """Return device_class based on a given topic"""
         device_class = ""
@@ -155,6 +157,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
         return device_class
 
     @staticmethod
+    @functools.cache
     def _get_state_class(topic: str) -> str:
         """Return state_class based on a given topic"""
         # topic: day_energy
