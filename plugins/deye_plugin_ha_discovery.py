@@ -21,6 +21,7 @@ import fnmatch
 import functools
 import json
 import logging
+import re
 
 from deye_config import DeyeConfig, DeyeEnv
 from deye_events import DeyeEventProcessor, DeyeEventList, DeyeObservationEvent
@@ -118,7 +119,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
         """Return device_class based on a given topic"""
         device_class = ""
 
-        # topic: ac/l*/voltage
+        # topic: ac/(l*/voltage
         # topic: dc/pv*/voltage
         if topic.endswith("/voltage"):
             device_class = "voltage"
@@ -128,12 +129,19 @@ class DeyeHADiscovery(DeyeEventProcessor):
         elif topic.endswith("/current"):
             device_class = "current"
 
-        # topic: day_energy
-        # topic: dc/pv*/day_energy
-        # topic: dc/pv*/total_energy
-        # topic: total_energy
-        elif topic.endswith("_energy"):
+        # topic: battery/(daily|total)_(charge|discharge)
+        # topic: (day|total)_energy
+        # topic: dc/pv*/(day|total)_energy
+        elif (
+            topic.endswith("_charge")
+            or topic.endswith("_discharge")
+            or topic.endswith("_energy")
+        ):
             device_class = "energy"
+
+        # topic: ac/l*/ct/(internal|external)
+        elif re.match(r"ac/l\d+/ct/(internal|external)", topic):
+            device_class = "power"
 
         # topic: ac/active_power
         # topic: ac/l*/power
@@ -147,11 +155,17 @@ class DeyeHADiscovery(DeyeEventProcessor):
         elif topic.endswith("/freq"):
             device_class = "frequency"
 
+        # topic: battery/soc
+        elif topic == "battery/soc":
+            device_class = "battery"
+
         elif topic == "uptime":
             device_class = "duration"
 
+        # topic: ac/temperature
+        # topic: battery/temperature
         # topic: radiator_temp
-        elif topic == "radiator_temp":
+        elif topic.endswith("temperature") or topic == "radiator_temp":
             device_class = "temperature"
 
         return device_class
@@ -160,24 +174,28 @@ class DeyeHADiscovery(DeyeEventProcessor):
     @functools.cache
     def _get_state_class(topic: str) -> str:
         """Return state_class based on a given topic"""
-        # topic: day_energy
-        # topic: dc/pv*/day_energy
-        # topic: dc/pv*/total_energy
-        # topic: total_energy
-        if topic.endswith("_energy"):
-            state_class = "total_increasing"
+        state_class = ""
 
-        elif topic == "uptime":
+        # topic: battery/(daily|total)_(charge|discharge)
+        # topic: day_energy
+        # topic: dc/pv*/(day|total)_energy
+        # topic: total_energy
+        if (
+            topic.endswith("_charge")
+            or topic.endswith("_discharge")
+            or topic.endswith("_energy")
+            or topic == "uptime"
+        ):
             state_class = "total_increasing"
 
         # topic: ac/active_power
         # topic: ac/freq
-        # topic: ac/l*/voltage
-        # topic: ac/l*/current
-        # topic: ac/l*/power
-        # topic: dc/pv*/current
-        # topic: dc/pv*/power
-        # topic: dc/pv*/voltage
+        # topic: ac/l*/ct/(internal|external)
+        # topic: ac/l*/(current|power|voltage)
+        # topic: ac/temperature
+        # topic: battery/soc
+        # topic: battery/temperature
+        # topic: dc/pv*/(current|power|voltage)
         # topic: dc/total_power
         # topic: operating_power
         # topic: radiator_temp
