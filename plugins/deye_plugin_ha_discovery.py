@@ -18,8 +18,10 @@
 # Copyright (c) 2024 Carsten Grohmann
 
 import fnmatch
+import functools
 import json
 import logging
+import re
 
 from deye_config import DeyeConfig, DeyeEnv
 from deye_events import DeyeEventProcessor, DeyeEventList, DeyeObservationEvent
@@ -41,6 +43,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
     """Inverter model"""
 
     component_prefix = "deye_inverter_mqtt"
+    """Prefix for the component name"""
 
     ha_discovery_prefix: str | None
     """MQTT prefix used by homeassistant"""
@@ -56,10 +59,16 @@ class DeyeHADiscovery(DeyeEventProcessor):
 
     def initialize(self):
         super().initialize()
-        self.ha_discovery_prefix = DeyeEnv.string("DEYE_HA_PLUGIN_HA_MQTT_PREFIX", "homeassistant")
-        self.inverter_manufacturer = DeyeEnv.string("DEYE_HA_PLUGIN_INVERTER_MANUFACTURER", "Unknown manufacturer")
+        self.ha_discovery_prefix = DeyeEnv.string(
+            "DEYE_HA_PLUGIN_HA_MQTT_PREFIX", "homeassistant"
+        )
+        self.inverter_manufacturer = DeyeEnv.string(
+            "DEYE_HA_PLUGIN_INVERTER_MANUFACTURER", "Unknown manufacturer"
+        )
         self.inverter_manufacturer = self.inverter_manufacturer.strip('"')
-        self.inverter_model = DeyeEnv.string("DEYE_HA_PLUGIN_INVERTER_MODEL", "Unknown model")
+        self.inverter_model = DeyeEnv.string(
+            "DEYE_HA_PLUGIN_INVERTER_MODEL", "Unknown model"
+        )
         self.inverter_model = self.inverter_model.strip('"')
         value = DeyeEnv.string("DEYE_HA_PLUGIN_IGNORE_TOPIC_PATTERNS", "")
         if value:
@@ -72,7 +81,9 @@ class DeyeHADiscovery(DeyeEventProcessor):
 
     def __build_topic_name(self, logger_topic_prefix: str, topic_suffix: str) -> str:
         if logger_topic_prefix:
-            return f"{self._config.mqtt.topic_prefix}/{logger_topic_prefix}/{topic_suffix}"
+            return (
+                f"{self._config.mqtt.topic_prefix}/{logger_topic_prefix}/{topic_suffix}"
+            )
         else:
             return f"{self._config.mqtt.topic_prefix}/{topic_suffix}"
 
@@ -80,8 +91,12 @@ class DeyeHADiscovery(DeyeEventProcessor):
         return str(logger_index) if logger_index > 0 else ""
 
     def _build_topic(self, observation: Observation):
-        logger_topic_prefix = self.__map_logger_index_to_topic_prefix(self._logger_index)
-        topic = self.__build_topic_name(logger_topic_prefix, observation.sensor.mqtt_topic_suffix)
+        logger_topic_prefix = self.__map_logger_index_to_topic_prefix(
+            self._logger_index
+        )
+        topic = self.__build_topic_name(
+            logger_topic_prefix, observation.sensor.mqtt_topic_suffix
+        )
         return topic
 
     @staticmethod
@@ -99,36 +114,91 @@ class DeyeHADiscovery(DeyeEventProcessor):
         return ret
 
     @staticmethod
+    @functools.cache
     def _get_device_class(topic: str) -> str:
         """Return device_class based on a given topic"""
         device_class = ""
+
+        # topic: ac/(l*/voltage
+        # topic: dc/pv*/voltage
         if topic.endswith("/voltage"):
             device_class = "voltage"
+
+        # topic: ac/l*/current
+        # topic: dc/pv*/current
         elif topic.endswith("/current"):
             device_class = "current"
-        elif topic.endswith("day_energy"):
+
+        # topic: battery/(daily|total)_(charge|discharge)
+        # topic: (day|total)_energy
+        # topic: dc/pv*/(day|total)_energy
+        elif (
+            topic.endswith("_charge")
+            or topic.endswith("_discharge")
+            or topic.endswith("_energy")
+        ):
             device_class = "energy"
-        elif topic.endswith("total_energy"):
-            device_class = "energy"
+
+        # topic: ac/l*/ct/(internal|external)
+        elif re.match(r"ac/l\d+/ct/(internal|external)", topic):
+            device_class = "power"
+
+        # topic: ac/active_power
+        # topic: ac/l*/power
+        # topic: dc/pv*/power
+        # topic: dc/total_power
+        # topic: operating_power
         elif topic.endswith("power"):
             device_class = "power"
+
+        # topic: ac/freq
         elif topic.endswith("/freq"):
             device_class = "frequency"
+
+        # topic: battery/soc
+        elif topic == "battery/soc":
+            device_class = "battery"
+
         elif topic == "uptime":
             device_class = "duration"
-        elif topic == "radiator_temp":
+
+        # topic: ac/temperature
+        # topic: battery/temperature
+        # topic: radiator_temp
+        elif topic.endswith("temperature") or topic == "radiator_temp":
             device_class = "temperature"
+
         return device_class
 
     @staticmethod
+    @functools.cache
     def _get_state_class(topic: str) -> str:
         """Return state_class based on a given topic"""
-        if topic.endswith("day_energy"):
-            state_class = "total"
-        elif topic.endswith("total_energy"):
+        state_class = ""
+
+        # topic: battery/(daily|total)_(charge|discharge)
+        # topic: day_energy
+        # topic: dc/pv*/(day|total)_energy
+        # topic: total_energy
+        if (
+            topic.endswith("_charge")
+            or topic.endswith("_discharge")
+            or topic.endswith("_energy")
+            or topic == "uptime"
+        ):
             state_class = "total_increasing"
-        elif topic == "uptime":
-            state_class = "total_increasing"
+
+        # topic: ac/active_power
+        # topic: ac/freq
+        # topic: ac/l*/ct/(internal|external)
+        # topic: ac/l*/(current|power|voltage)
+        # topic: ac/temperature
+        # topic: battery/soc
+        # topic: battery/temperature
+        # topic: dc/pv*/(current|power|voltage)
+        # topic: dc/total_power
+        # topic: operating_power
+        # topic: radiator_temp
         else:
             state_class = "measurement"
 
@@ -146,7 +216,9 @@ class DeyeHADiscovery(DeyeEventProcessor):
 
         device_class = self._get_device_class(mqtt_topic_suffix)
         if not device_class:
-            self._logging.error("Unable to determinate device_class for topic %s", mqtt_topic_suffix)
+            self._logging.error(
+                "Unable to determinate device_class for topic %s", mqtt_topic_suffix
+            )
             return
 
         state_class = self._get_state_class(mqtt_topic_suffix)
@@ -185,7 +257,9 @@ class DeyeHADiscovery(DeyeEventProcessor):
             ("MQTT bridge", "application_status", "running", "status"),
             ("Inverter logger", "logger_status", "connectivity", "logger_status"),
         ]:
-            component_id = f"{self.component_prefix}_{self._config.logger.serial_number}"
+            component_id = (
+                f"{self.component_prefix}_{self._config.logger.serial_number}"
+            )
             discovery_topic = f"{self.ha_discovery_prefix}/binary_sensor/{component_id}/{mqtt_topic}/config"
 
             discover_config = {
@@ -213,8 +287,14 @@ class DeyeHADiscovery(DeyeEventProcessor):
         """Create a new HA discovery topic for all events"""
 
         self._logger_index = events.logger_index
-        self._logger_serial = self._config.logger_configs[self._logger_index].serial_number
-        self._logging.info("Processing events from logger: %s, SN:%s", self._logger_index, self._logger_serial)
+        self._logger_serial = self._config.logger_configs[
+            self._logger_index
+        ].serial_number
+        self._logging.info(
+            "Processing events from logger: %s, SN:%s",
+            self._logger_index,
+            self._logger_serial,
+        )
         self._device_name = f"{self.inverter_manufacturer} Inverter MQTT"
 
         self.publish_status_information()
@@ -228,8 +308,8 @@ class DeyeHADiscovery(DeyeEventProcessor):
                 continue
 
             if any(
-                    fnmatch.fnmatch(event.observation.sensor.mqtt_topic_suffix, pattern)
-                    for pattern in self.ignore_topic_patterns
+                fnmatch.fnmatch(event.observation.sensor.mqtt_topic_suffix, pattern)
+                for pattern in self.ignore_topic_patterns
             ):
                 continue
 
@@ -254,7 +334,9 @@ class DeyePlugin:
             _log.info("Instantiate DeyeHADiscovery plugin")
             self.publisher = DeyeHADiscovery(plugin_context)
         else:
-            _log.info("Config item DEYE_HA_PLUGIN_HA_MQTT_PREFIX not set - do not instantiate DeyeHADiscovery plugin")
+            _log.info(
+                "Config item DEYE_HA_PLUGIN_HA_MQTT_PREFIX not set - do not instantiate DeyeHADiscovery plugin"
+            )
 
     def get_event_processors(self) -> [DeyeEventProcessor]:
         """Provides a list of custom event processors"""
