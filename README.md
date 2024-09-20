@@ -74,6 +74,16 @@ Energy usage diagram provided by Home Assistant filled with data from a "Deye so
 * [Home Assistent](https://www.home-assistant.io/)
 * [Deye solar inverter MQTT bridge](https://github.com/kbialek/deye-inverter-mqtt)
 
+## Changelog
+
+### 2024-09-20 - Version 2
+* README extended
+* All energy topics uses state class "total_increasing" now
+* Add more MQTT topics
+
+### 2024-08-30 - Version 1
+* first release
+
 ## Known Bugs/Issues
 
 Check the project [issue tracker](https://todo.sr.ht/~carstengrohmann/deye-mqtt-ha-plugin)
