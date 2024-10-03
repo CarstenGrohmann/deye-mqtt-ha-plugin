@@ -76,12 +76,15 @@ Energy usage diagram provided by Home Assistant filled with data from a "Deye so
 
 ## Changelog
 
-### 2024-09-20 - Version 2
+### 2024-10-03
+* Fix wrong unit for uptime sensor
+
+### 2024-09-20
 * README extended
 * All energy topics uses state class "total_increasing" now
 * Add more MQTT topics
 
-### 2024-08-30 - Version 1
+### 2024-08-30
 * first release
 
 ## Known Bugs/Issues

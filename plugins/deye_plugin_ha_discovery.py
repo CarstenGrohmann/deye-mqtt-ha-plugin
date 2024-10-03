@@ -100,6 +100,13 @@ class DeyeHADiscovery(DeyeEventProcessor):
         return topic
 
     @staticmethod
+    def _adapt_unit(unit: str):
+        """Map units from deye-inverter-mqtt to Home Assistant"""
+        if unit == "minutes":
+            unit = "min"
+        return unit
+
+    @staticmethod
     def _fmt_topic(topic: str) -> str:
         """Format topic to include into another topic string"""
         res = topic.lower()
@@ -236,7 +243,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
             "force_update": True,
             "device_class": device_class,
             "state_class": state_class,
-            "unit_of_measurement": observation.sensor.unit,
+            "unit_of_measurement": self._adapt_unit(observation.sensor.unit),
             "availability_topic": f"{self._config.mqtt.topic_prefix}/status",
             "state_topic": topic,
             "device": {
