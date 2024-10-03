@@ -30,6 +30,9 @@ from deye_observation import Observation
 from deye_plugin_loader import DeyePluginContext
 
 
+RELEASE_DATE = "2024-10-03"
+
+
 class DeyeHADiscovery(DeyeEventProcessor):
     """Plugin for HA discovery topics"""
 
@@ -77,7 +80,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
             self.ignore_topic_patterns = []
 
     def get_id(self):
-        return "HA Discovery Plugin"
+        return f"HA Discovery Plugin version {RELEASE_DATE}"
 
     def __build_topic_name(self, logger_topic_prefix: str, topic_suffix: str) -> str:
         if logger_topic_prefix:
