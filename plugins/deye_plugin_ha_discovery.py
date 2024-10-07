@@ -36,7 +36,7 @@ RELEASE_DATE = "2024-10-22"
 class DeyeHADiscovery(DeyeEventProcessor):
     """Plugin for HA discovery topics"""
 
-    ignore_topic_patterns: list = []
+    _ignore_topic_patterns: list = []
     """List of topics to be ignored by this plugin"""
 
     inverter_manufacturer: str | None = None
@@ -58,7 +58,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
         self._logger_index: int | None = None
         self._logger_serial: str = ""
         self._device_name: str | None = None
-        self.ignore_topic_patterns = []
+        self._ignore_topic_patterns = []
 
     def initialize(self):
         super().initialize()
@@ -75,9 +75,9 @@ class DeyeHADiscovery(DeyeEventProcessor):
         self.inverter_model = self.inverter_model.strip('"')
         value = DeyeEnv.string("DEYE_HA_PLUGIN_IGNORE_TOPIC_PATTERNS", "")
         if value:
-            self.ignore_topic_patterns = value.split(":")
+            self._ignore_topic_patterns = value.split(":")
         else:
-            self.ignore_topic_patterns = []
+            self._ignore_topic_patterns = []
 
     def get_id(self):
         return f"HA Discovery Plugin version {RELEASE_DATE}"
@@ -93,13 +93,19 @@ class DeyeHADiscovery(DeyeEventProcessor):
     def __map_logger_index_to_topic_prefix(self, logger_index: int):
         return str(logger_index) if logger_index > 0 else ""
 
-    def _build_topic(self, observation: Observation):
+    def _create_full_mqtt_topic(self, mqtt_topic_suffix: str) -> str:
+        """Extend MQTT suffix to a full MQTT topic
+
+        Args:
+            mqtt_topic_suffix (str): Sensor specific part of the MQTT topic
+
+        Returns:
+            str: Full MQTT topic
+        """
         logger_topic_prefix = self.__map_logger_index_to_topic_prefix(
             self._logger_index
         )
-        topic = self.__build_topic_name(
-            logger_topic_prefix, observation.sensor.mqtt_topic_suffix
-        )
+        topic = self.__build_topic_name(logger_topic_prefix, mqtt_topic_suffix)
         return topic
 
     @staticmethod
@@ -110,6 +116,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
         return unit
 
     @staticmethod
+    @functools.cache
     def _fmt_topic(topic: str) -> str:
         """Format topic to include into another topic string"""
         res = topic.lower()
@@ -117,16 +124,23 @@ class DeyeHADiscovery(DeyeEventProcessor):
         res = res.strip()
         return res
 
+    @functools.cache
     def _get_unique_id(self, sensor_name: str) -> str:
         """Return a unique id for the current sensor"""
-        ret = f"deye_mqtt_inverter_{self._config.logger.serial_number}_{sensor_name}".lower()
-        ret = ret.replace(" ", "_")
-        return ret
+        # Do not change the prefix, as a changed unique ID generates new sensors.
+        # The prefix differs from self.component_prefix = "deye_inverter_mqtt"
+        _unique_id = f"deye_mqtt_inverter_{self._config.logger.serial_number}_{sensor_name}".lower()
+        _unique_id = _unique_id.replace(" ", "_")
+        return _unique_id
 
     @staticmethod
     @functools.cache
     def _get_device_class(topic: str) -> str:
-        """Return device_class based on a given topic"""
+        """Return device_class based on a given topic
+
+        Args:
+            topic (str): MQTT topic for the sensor value
+        """
         device_class = ""
 
         # topic: ac/l*/voltage
@@ -185,13 +199,17 @@ class DeyeHADiscovery(DeyeEventProcessor):
     @staticmethod
     @functools.cache
     def _get_state_class(topic: str) -> str:
-        """Return state_class based on a given topic"""
+        """Return state_class based on a given topic
+
+        Args:
+            topic (str): MQTT topic for the sensor value
+        """
         state_class = ""
 
         # topic: battery/(daily|total)_(charge|discharge)
-        # topic: day_energy
+        # topic: (day|total)_energy
         # topic: dc/pv*/(day|total)_energy
-        # topic: total_energy
+        # topic: uptime
         if (
             topic.endswith("_charge")
             or topic.endswith("_discharge")
@@ -220,8 +238,8 @@ class DeyeHADiscovery(DeyeEventProcessor):
         """Send HA discovery messages about available sensors
 
         Args:
-            topic (str): MQTT topic with sensor value
-            observation (Observation): Values from sensor
+            topic (str): MQTT topic for the sensor value
+            observation (Observation): Sensor values
         """
         mqtt_topic_suffix = observation.sensor.mqtt_topic_suffix
         self._logging.debug("Create HA discovery for %s", mqtt_topic_suffix)
@@ -235,12 +253,10 @@ class DeyeHADiscovery(DeyeEventProcessor):
 
         state_class = self._get_state_class(mqtt_topic_suffix)
 
-        # <discovery_prefix>/<component>/[<node_id>/]<object_id>/config
-        component_id = f"{self.component_prefix}_{self._config.logger.serial_number}"
+        discovery_prefix = self.ha_discovery_prefix
+        node_id = f"{self.component_prefix}_{self._config.logger.serial_number}"
         object_id = self._fmt_topic(mqtt_topic_suffix)
-        discovery_topic = (
-            f"{self.ha_discovery_prefix}/sensor/{component_id}/{object_id}/config"
-        )
+        discovery_topic = f"{discovery_prefix}/sensor/{node_id}/{object_id}/config"
 
         discover_config = {
             "name": observation.sensor.name,
@@ -252,7 +268,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
             "availability_topic": f"{self._config.mqtt.topic_prefix}/status",
             "state_topic": topic,
             "device": {
-                "identifiers": [component_id],
+                "identifiers": [node_id],
                 "name": self._device_name,
                 "manufacturer": self.inverter_manufacturer,
                 "model": f"{self.inverter_model} SN:{self._logger_serial}",
@@ -321,11 +337,13 @@ class DeyeHADiscovery(DeyeEventProcessor):
 
             if any(
                 fnmatch.fnmatch(event.observation.sensor.mqtt_topic_suffix, pattern)
-                for pattern in self.ignore_topic_patterns
+                for pattern in self._ignore_topic_patterns
             ):
                 continue
 
-            topic = self._build_topic(event.observation)
+            topic = self._create_full_mqtt_topic(
+                event.observation.sensor.mqtt_topic_suffix
+            )
             self.publish_sensor_information(topic, event.observation)
 
 
