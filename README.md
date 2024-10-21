@@ -76,6 +76,9 @@ Energy usage diagram provided by Home Assistant filled with data from a "Deye so
 
 ## Changelog
 
+### 2024-XX-XX
+* Add support for active power regulation
+ 
 ### 2024-10-22
 * Add device classes for total_energy_bought and daily_energy_sold
 
