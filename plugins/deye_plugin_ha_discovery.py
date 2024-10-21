@@ -36,6 +36,9 @@ RELEASE_DATE = "2024-10-22"
 class DeyeHADiscovery(DeyeEventProcessor):
     """Plugin for HA discovery topics"""
 
+    _active_power_regulation_enabled: bool = False
+    """Publish control for active power regulation"""
+
     _ignore_topic_patterns: list = []
     """List of topics to be ignored by this plugin"""
 
@@ -59,6 +62,9 @@ class DeyeHADiscovery(DeyeEventProcessor):
         self._logger_serial: str = ""
         self._device_name: str | None = None
         self._ignore_topic_patterns = []
+        self._active_power_regulation_enabled = DeyeEnv.boolean(
+            "DEYE_FEATURE_ACTIVE_POWER_REGULATION", False
+        )
 
     def initialize(self):
         super().initialize()
@@ -256,6 +262,9 @@ class DeyeHADiscovery(DeyeEventProcessor):
         discovery_prefix = self.ha_discovery_prefix
         node_id = f"{self.component_prefix}_{self._config.logger.serial_number}"
         object_id = self._fmt_topic(mqtt_topic_suffix)
+
+        # discovery topic format:
+        # <discovery_prefix>/<component>/[<node_id>/]<object_id>/config
         discovery_topic = f"{discovery_prefix}/sensor/{node_id}/{object_id}/config"
 
         discover_config = {
@@ -267,6 +276,49 @@ class DeyeHADiscovery(DeyeEventProcessor):
             "unit_of_measurement": self._adapt_unit(observation.sensor.unit),
             "availability_topic": f"{self._config.mqtt.topic_prefix}/status",
             "state_topic": topic,
+            "device": {
+                "identifiers": [node_id],
+                "name": self._device_name,
+                "manufacturer": self.inverter_manufacturer,
+                "model": f"{self.inverter_model} SN:{self._logger_serial}",
+                "serial_number": str(self._logger_serial),
+                "sw_version": f"deye-inverter-mqtt with {self.get_id()}",
+            },
+        }
+        payload = json.dumps(discover_config)
+        self._mqtt_client.publish(discovery_topic, payload)
+
+    def publish_active_power_regulation(self):
+        """Send HA discovery message for active power regulation feature"""
+        component_id = f"{self.component_prefix}_{self._config.logger.serial_number}"
+        node_id = f"{self.component_prefix}_{self._config.logger.serial_number}"
+
+        # discovery topic format:
+        # <discovery_prefix>/<component>/[<node_id>/]<object_id>/config
+        discovery_topic = (
+            f"{self.ha_discovery_prefix}/number/{component_id}/"
+            "active_power_regulation/config"
+        )
+
+        command_topic = (
+            f"{self._config.mqtt.topic_prefix}/settings/active_power_regulation/command"
+        )
+        state_topic = (
+            f"{self._config.mqtt.topic_prefix}/settings/active_power_regulation"
+        )
+
+        # TOPIC: {MQTT_TOPIC_PREFIX}/settings/active_power_regulation/command
+        discover_config = {
+            "name": "Active Power Regulation",
+            "unique_id": self._get_unique_id("Active Power Regulation"),
+            "unit_of_measurement": "%",
+            "availability_topic": f"{self._config.mqtt.topic_prefix}/status",
+            "min": 0,
+            "max": 120,
+            "mode": "slider",
+            "step": 1,
+            "command_topic": command_topic,
+            "state_topic": state_topic,
             "device": {
                 "identifiers": [node_id],
                 "name": self._device_name,
@@ -326,6 +378,9 @@ class DeyeHADiscovery(DeyeEventProcessor):
         self._device_name = f"{self.inverter_manufacturer} Inverter MQTT"
 
         self.publish_status_information()
+
+        if self._active_power_regulation_enabled:
+            self.publish_active_power_regulation()
 
         event: DeyeObservationEvent
         for event in events:

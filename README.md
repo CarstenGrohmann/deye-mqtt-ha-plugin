@@ -9,6 +9,9 @@ Energy usage diagram provided by Home Assistant filled with data from a "Deye so
 
 ![Screenshot of energy usage diagram provided by Home Assistant filled with data from a Deye solar inverter](./screenshot_energy_usage.png)
 
+This integration can read and update the active power regulation feature's value if it's enabled. However, reading and
+updating the "time of use" (ToU) configuration has not been implemented yet.
+
 ## Installation
 
 1. Install Deye solar inverter MQTT bridge
@@ -76,6 +79,9 @@ Energy usage diagram provided by Home Assistant filled with data from a "Deye so
 
 ## Changelog
 
+### 2024-XX-XX
+* Add support for active power regulation
+ 
 ### 2024-10-22
 * Add device classes for total_energy_bought and daily_energy_sold
 
