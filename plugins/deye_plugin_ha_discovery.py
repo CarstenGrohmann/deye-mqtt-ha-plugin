@@ -30,7 +30,7 @@ from deye_observation import Observation
 from deye_plugin_loader import DeyePluginContext
 
 
-RELEASE_DATE = "2024-10-03"
+RELEASE_DATE = "2024-10-22"
 
 
 class DeyeHADiscovery(DeyeEventProcessor):
@@ -129,7 +129,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
         """Return device_class based on a given topic"""
         device_class = ""
 
-        # topic: ac/(l*/voltage
+        # topic: ac/l*/voltage
         # topic: dc/pv*/voltage
         if topic.endswith("/voltage"):
             device_class = "voltage"
@@ -142,10 +142,12 @@ class DeyeHADiscovery(DeyeEventProcessor):
         # topic: battery/(daily|total)_(charge|discharge)
         # topic: (day|total)_energy
         # topic: dc/pv*/(day|total)_energy
+        # topic: ac/(total_energy_bought|daily_energy_sold)
         elif (
             topic.endswith("_charge")
             or topic.endswith("_discharge")
             or topic.endswith("_energy")
+            or "_energy_" in topic
         ):
             device_class = "energy"
 

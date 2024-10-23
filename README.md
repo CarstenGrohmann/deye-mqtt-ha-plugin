@@ -76,6 +76,9 @@ Energy usage diagram provided by Home Assistant filled with data from a "Deye so
 
 ## Changelog
 
+### 2024-10-22
+* Add device classes for total_energy_bought and daily_energy_sold
+
 ### 2024-10-03
 * Fix wrong unit for uptime sensor
 
