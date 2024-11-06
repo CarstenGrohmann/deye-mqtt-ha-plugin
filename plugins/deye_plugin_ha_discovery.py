@@ -39,8 +39,11 @@ class DeyeHADiscovery(DeyeEventProcessor):
     _active_power_regulation_enabled: bool = False
     """Publish control for active power regulation"""
 
-    _ignore_topic_patterns: list = []
-    """List of topics to be ignored by this plugin"""
+    _ignore_user_topic_patterns: tuple = ()
+    """List of user-specific topics to be ignored"""
+
+    _ignore_default_topic_pattern: list[str] = ["settings/active_power_regulation"]
+    """List of topics that are always ignored"""
 
     inverter_manufacturer: str | None = None
     """Inverter manufacturer"""
@@ -61,7 +64,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
         self._logger_index: int | None = None
         self._logger_serial: str = ""
         self._device_name: str | None = None
-        self._ignore_topic_patterns = []
+        self._ignore_user_topic_patterns = ()
         self._active_power_regulation_enabled = DeyeEnv.boolean(
             "DEYE_FEATURE_ACTIVE_POWER_REGULATION", False
         )
@@ -81,9 +84,11 @@ class DeyeHADiscovery(DeyeEventProcessor):
         self.inverter_model = self.inverter_model.strip('"')
         value = DeyeEnv.string("DEYE_HA_PLUGIN_IGNORE_TOPIC_PATTERNS", "")
         if value:
-            self._ignore_topic_patterns = value.split(":")
+            self._ignore_user_topic_patterns = tuple(
+                value.split(":") + self._ignore_default_topic_pattern
+            )
         else:
-            self._ignore_topic_patterns = []
+            self._ignore_user_topic_patterns = tuple(self._ignore_default_topic_pattern)
 
     def get_id(self):
         return f"HA Discovery Plugin version {RELEASE_DATE}"
@@ -201,6 +206,18 @@ class DeyeHADiscovery(DeyeEventProcessor):
             device_class = "temperature"
 
         return device_class
+
+    @staticmethod
+    @functools.cache
+    def _ignore_topic(topic: str, ignore_list: tuple) -> bool:
+        """Check whether the topic matches a pattern in the ignore list
+
+        Args:
+            topic (str): MQTT topic for the sensor value
+            ignore_list (tuple): Tuple of strings with pattern to ignore the given topic
+        """
+        res = any(fnmatch.fnmatch(topic, pattern) for pattern in ignore_list)
+        return res
 
     @staticmethod
     @functools.cache
@@ -390,9 +407,9 @@ class DeyeHADiscovery(DeyeEventProcessor):
             if not event.observation.sensor.mqtt_topic_suffix:
                 continue
 
-            if any(
-                fnmatch.fnmatch(event.observation.sensor.mqtt_topic_suffix, pattern)
-                for pattern in self._ignore_topic_patterns
+            if self._ignore_topic(
+                event.observation.sensor.mqtt_topic_suffix,
+                self._ignore_user_topic_patterns,
             ):
                 continue
 

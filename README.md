@@ -28,7 +28,7 @@ updating the "time of use" (ToU) configuration has not been implemented yet.
     # Topics not published to HA
     # Use : as separator, supports Unix shell-style wildcards *, ?, [seq] and
     # [!seq] as implemented with Python fnmatch,
-    DEYE_HA_PLUGIN_IGNORE_TOPIC_PATTERNS=settings/active_power_regulation:uptime:*/pv[234]/*
+    DEYE_HA_PLUGIN_IGNORE_TOPIC_PATTERNS=uptime:*/pv[234]/*
     ```
 
 3. Install the plugin from `plugins` directory as described in ["How to start the docker container with custom plugins"](https://github.com/kbialek/deye-inverter-mqtt#how-to-start-the-docker-container-with-custom-plugins)
