@@ -93,32 +93,6 @@ class DeyeHADiscovery(DeyeEventProcessor):
     def get_id(self):
         return f"HA Discovery Plugin version {RELEASE_DATE}"
 
-    def __build_topic_name(self, logger_topic_prefix: str, topic_suffix: str) -> str:
-        if logger_topic_prefix:
-            return (
-                f"{self._config.mqtt.topic_prefix}/{logger_topic_prefix}/{topic_suffix}"
-            )
-        else:
-            return f"{self._config.mqtt.topic_prefix}/{topic_suffix}"
-
-    def __map_logger_index_to_topic_prefix(self, logger_index: int):
-        return str(logger_index) if logger_index > 0 else ""
-
-    def _create_full_mqtt_topic(self, mqtt_topic_suffix: str) -> str:
-        """Extend MQTT suffix to a full MQTT topic
-
-        Args:
-            mqtt_topic_suffix (str): Sensor specific part of the MQTT topic
-
-        Returns:
-            str: Full MQTT topic
-        """
-        logger_topic_prefix = self.__map_logger_index_to_topic_prefix(
-            self._logger_index
-        )
-        topic = self.__build_topic_name(logger_topic_prefix, mqtt_topic_suffix)
-        return topic
-
     @staticmethod
     def _adapt_unit(unit: str):
         """Map units from deye-inverter-mqtt to Home Assistant"""
@@ -413,8 +387,8 @@ class DeyeHADiscovery(DeyeEventProcessor):
             ):
                 continue
 
-            topic = self._create_full_mqtt_topic(
-                event.observation.sensor.mqtt_topic_suffix
+            topic = self._mqtt_client.build_topic_name(
+                self._logger_index, event.observation.sensor.mqtt_topic_suffix
             )
             self.publish_sensor_information(topic, event.observation)
 

@@ -81,6 +81,9 @@ updating the "time of use" (ToU) configuration has not been implemented yet.
 
 ### 2024-XX-XX
 * Add support for active power regulation
+* Use new public API to create MQTT topic
+  (requires [Deye solar inverter MQTT bridge](https://github.com/kbialek/deye-inverter-mqtt)
+  at least version 2024.11.1)
  
 ### 2024-10-22
 * Add device classes for total_energy_bought and daily_energy_sold
