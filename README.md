@@ -9,11 +9,15 @@ Energy usage diagram provided by Home Assistant filled with data from a "Deye so
 
 ![Screenshot of energy usage diagram provided by Home Assistant filled with data from a Deye solar inverter](./screenshot_energy_usage.png)
 
+This integration can read and update the active power regulation feature's value if it's enabled. However, reading and
+updating the "time of use" (ToU) configuration has not been implemented yet.
+
 ## Installation
 
 1. Install Deye solar inverter MQTT bridge
 
-2. Extend the Deye solar inverter MQTT bridge configuration file `config.env` as described in this example:
+2. Expand the Deye Solar Inverter MQTT Bridge configuration file `config.env` with a customized version of this
+   section:
 
     ```bash
     # Home Assistant Integration
@@ -25,10 +29,11 @@ Energy usage diagram provided by Home Assistant filled with data from a "Deye so
     # Topics not published to HA
     # Use : as separator, supports Unix shell-style wildcards *, ?, [seq] and
     # [!seq] as implemented with Python fnmatch,
-    DEYE_HA_PLUGIN_IGNORE_TOPIC_PATTERNS=settings/active_power_regulation:uptime:*/pv[234]/*
+    DEYE_HA_PLUGIN_IGNORE_TOPIC_PATTERNS=uptime:*/pv[234]/*
     ```
 
-3. Install the plugin from `plugins` directory as described in ["How to start the docker container with custom plugins"](https://github.com/kbialek/deye-inverter-mqtt#how-to-start-the-docker-container-with-custom-plugins)
+3. Install the plugin from `plugins` directory as described in ["How to start the docker container with custom plugins"](https://github.com/kbialek/deye-inverter-mqtt#how-to-start-the-docker-container-with-custom-plugins) and restart container to
+   activate the changes in `config.env`.
 
 4. Switch to the Home Assistant and install [Utility Meter](https://www.home-assistant.io/integrations/utility_meter/)
 
@@ -43,7 +48,7 @@ Energy usage diagram provided by Home Assistant filled with data from a "Deye so
         cycle: daily
     ```
 
-    or graphically 
+    or graphically
 
     ![Screenshot of Utility Meter setup part 1](./screenshot_setup_utility_meter_1.png)
 
@@ -51,19 +56,32 @@ Energy usage diagram provided by Home Assistant filled with data from a "Deye so
 
 ## Requirements
 
-* [Deye solar inverter MQTT bridge](https://github.com/kbialek/deye-inverter-mqtt) 2024.07.1
+* [Deye solar inverter MQTT bridge](https://github.com/kbialek/deye-inverter-mqtt) version 2024.11.1 or newer
 
 ## Troubleshooting
 
-1. Check log of the deye-mqtt container for errors.
+1. Ensure that the container `deye-mqtt` has the required minimum version
+
+2. Check if the plugin has been loaded.
 
     ```bash
     docker logs deye-mqtt
     ```
 
-   On demand increase the detail of the logging in `config.env` to `LOG_LEVEL=DEBUG` and restart the container.
+   When starting the container after loading this plugin, a message similar to the following line should appear in
+   the container log.
 
-2. Checking the content published in the MQTT broker. You can use a graphical tool such as the [MQTT Explorer](https://mqtt-explorer.com/) for this.
+    ```
+    DeyePluginLoader - INFO - Loading plugin: 'deye_plugin_ha_discovery'
+    ```
+
+    If this line does not appear, you should check the installation of the plugin.
+
+3. Check log of the `deye-mqtt` container for errors.
+
+    On demand increase the detail of the logging in `config.env` to `LOG_LEVEL=DEBUG` and restart the container.
+
+4. Checking the content published in the MQTT broker. You can use a graphical tool such as the [MQTT Explorer](https://mqtt-explorer.com/) for this.
 
 
 ## Resources
@@ -76,6 +94,13 @@ Energy usage diagram provided by Home Assistant filled with data from a "Deye so
 
 ## Changelog
 
+### 2024-XX-XX
+* Add support for active power regulation
+* Internal code changes
+* Use new public API to create MQTT topic
+  (requires [Deye solar inverter MQTT bridge](https://github.com/kbialek/deye-inverter-mqtt)
+  at least version 2024.11.1)
+ 
 ### 2024-10-22
 * Add device classes for total_energy_bought and daily_energy_sold
 
