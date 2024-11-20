@@ -94,7 +94,7 @@ updating the "time of use" (ToU) configuration has not been implemented yet.
 
 ## Changelog
 
-### 2024-XX-XX
+### 2024-11-20
 * Add support for active power regulation
 * Internal code changes
 * Use new public API to create MQTT topic
