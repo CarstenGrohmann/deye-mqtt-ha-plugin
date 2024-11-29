@@ -130,12 +130,12 @@ class DeyeHADiscovery(DeyeEventProcessor):
 
         # topic: ac/l*/voltage
         # topic: dc/pv*/voltage
-        if topic.endswith("/voltage"):
+        if topic.endswith("/voltage") or topic.endswith("/charging_voltage") or topic.endswith("/discharge_voltage"):
             device_class = "voltage"
 
         # topic: ac/l*/current
         # topic: dc/pv*/current
-        elif topic.endswith("/current"):
+        elif topic.endswith("/current") or topic.endswith("charge_current_limit") or topic.endswith("/charging_max_current") or topic.endswith("/discharge_max_current"):
             device_class = "current"
 
         # topic: battery/(daily|total)_(charge|discharge)
@@ -166,18 +166,21 @@ class DeyeHADiscovery(DeyeEventProcessor):
         elif topic.endswith("/freq"):
             device_class = "frequency"
 
+        # topic: ac/temperature
+        # topic: battery/temperature
+        # topic: radiator_temp
+        elif topic.endswith("temperature") or topic.endswith("/temp") or topic == "radiator_temp":
+            device_class = "temperature"
+
         # topic: battery/soc
-        elif topic == "battery/soc":
+        elif topic.endswith("/soc") or topic.startswith("bms/"):
             device_class = "battery"
 
         elif topic == "uptime":
             device_class = "duration"
 
-        # topic: ac/temperature
-        # topic: battery/temperature
-        # topic: radiator_temp
-        elif topic.endswith("temperature") or topic == "radiator_temp":
-            device_class = "temperature"
+        elif topic == "inverter/status":
+            device_class = "enum"
 
         return device_class
 
@@ -211,6 +214,8 @@ class DeyeHADiscovery(DeyeEventProcessor):
             topic.endswith("_charge")
             or topic.endswith("_discharge")
             or topic.endswith("_energy")
+            or topic.endswith("_energy_bought")
+            or topic.endswith("_energy_sold")
             or topic == "uptime"
         ):
             state_class = "total_increasing"
@@ -231,6 +236,20 @@ class DeyeHADiscovery(DeyeEventProcessor):
 
         return state_class
 
+    @staticmethod
+    @functools.cache
+    def _get_options(topic: str) -> str:
+        """Return entity options based on a given topic
+
+        Args:
+            topic (str): MQTT topic for the sensor value
+        """
+        options = []
+        if topic == "inverter/status":
+            options = ["standby", "selfcheck", "normal", "alarm", "fault"]
+
+        return options
+
     def publish_sensor_information(self, topic: str, observation: Observation):
         """Send HA discovery messages about available sensors
 
@@ -248,7 +267,10 @@ class DeyeHADiscovery(DeyeEventProcessor):
             )
             return
 
-        state_class = self._get_state_class(mqtt_topic_suffix)
+        if device_class == "enum":
+            enum_options = self._get_options(mqtt_topic_suffix)
+        else:
+            state_class = self._get_state_class(mqtt_topic_suffix)
 
         discovery_prefix = self.ha_discovery_prefix
         node_id = f"{self.component_prefix}_{self._config.logger.serial_number}"
@@ -258,24 +280,43 @@ class DeyeHADiscovery(DeyeEventProcessor):
         # <discovery_prefix>/<component>/[<node_id>/]<object_id>/config
         discovery_topic = f"{discovery_prefix}/sensor/{node_id}/{object_id}/config"
 
-        discover_config = {
-            "name": observation.sensor.name,
-            "unique_id": self._get_unique_id(observation.sensor.name),
-            "force_update": True,
-            "device_class": device_class,
-            "state_class": state_class,
-            "unit_of_measurement": self._adapt_unit(observation.sensor.unit),
-            "availability_topic": f"{self._config.mqtt.topic_prefix}/status",
-            "state_topic": topic,
-            "device": {
-                "identifiers": [node_id],
-                "name": self._device_name,
-                "manufacturer": self.inverter_manufacturer,
-                "model": f"{self.inverter_model} SN:{self._logger_serial}",
-                "serial_number": str(self._logger_serial),
-                "sw_version": f"deye-inverter-mqtt with {self.get_id()}",
-            },
-        }
+        if device_class == "enum":
+            discover_config = {
+                "name": observation.sensor.name,
+                "unique_id": self._get_unique_id(observation.sensor.name),
+                "force_update": True,
+                "device_class": device_class,
+                "options": enum_options,
+                "availability_topic": f"{self._config.mqtt.topic_prefix}/status",
+                "state_topic": topic,
+                "device": {
+                    "identifiers": [node_id],
+                    "name": self._device_name,
+                    "manufacturer": self.inverter_manufacturer,
+                    "model": f"{self.inverter_model} SN:{self._logger_serial}",
+                    "serial_number": str(self._logger_serial),
+                    "sw_version": f"deye-inverter-mqtt with {self.get_id()}",
+                },
+            }
+        else:
+            discover_config = {
+                "name": observation.sensor.name,
+                "unique_id": self._get_unique_id(observation.sensor.name),
+                "force_update": True,
+                "device_class": device_class,
+                "state_class": state_class,
+                "unit_of_measurement": self._adapt_unit(observation.sensor.unit),
+                "availability_topic": f"{self._config.mqtt.topic_prefix}/status",
+                "state_topic": topic,
+                "device": {
+                    "identifiers": [node_id],
+                    "name": self._device_name,
+                    "manufacturer": self.inverter_manufacturer,
+                    "model": f"{self.inverter_model} SN:{self._logger_serial}",
+                    "serial_number": str(self._logger_serial),
+                    "sw_version": f"deye-inverter-mqtt with {self.get_id()}",
+                },
+            }
         payload = json.dumps(discover_config)
         self._mqtt_client.publish(discovery_topic, payload)
 
