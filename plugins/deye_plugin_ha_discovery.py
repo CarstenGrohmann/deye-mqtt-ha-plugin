@@ -130,11 +130,16 @@ class DeyeHADiscovery(DeyeEventProcessor):
 
         # topic: ac/l*/voltage
         # topic: dc/pv*/voltage
+        # topic: bms/*/charging_voltage
+        # topic: bms/*/discharge_voltage
         if topic.endswith("/voltage") or topic.endswith("/charging_voltage") or topic.endswith("/discharge_voltage"):
             device_class = "voltage"
 
         # topic: ac/l*/current
         # topic: dc/pv*/current
+        # topic: bms/*/charge_current_limit
+        # topic: bms/*/discharge_current_limit
+        # topic: bms/*/discharge_max_current
         elif topic.endswith("/current") or topic.endswith("charge_current_limit") or topic.endswith("/charging_max_current") or topic.endswith("/discharge_max_current"):
             device_class = "current"
 
@@ -168,11 +173,13 @@ class DeyeHADiscovery(DeyeEventProcessor):
 
         # topic: ac/temperature
         # topic: battery/temperature
+        # topic: battery/*/temperature
         # topic: radiator_temp
         elif topic.endswith("temperature") or topic.endswith("/temp") or topic == "radiator_temp":
             device_class = "temperature"
 
         # topic: battery/soc
+        # topic: bms/*/soc
         elif topic.endswith("/soc") or topic.startswith("bms/"):
             device_class = "battery"
 
@@ -210,6 +217,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
         # topic: (day|total)_energy
         # topic: dc/pv*/(day|total)_energy
         # topic: uptime
+        # topic: ac/(daily|total)_energy_(bought|sold)
         if (
             topic.endswith("_charge")
             or topic.endswith("_discharge")
@@ -280,43 +288,29 @@ class DeyeHADiscovery(DeyeEventProcessor):
         # <discovery_prefix>/<component>/[<node_id>/]<object_id>/config
         discovery_topic = f"{discovery_prefix}/sensor/{node_id}/{object_id}/config"
 
+        discover_config = {
+            "name": observation.sensor.name,
+            "unique_id": self._get_unique_id(observation.sensor.name),
+            "force_update": True,
+            "device_class": device_class,
+            "unit_of_measurement": self._adapt_unit(observation.sensor.unit),
+            "availability_topic": f"{self._config.mqtt.topic_prefix}/status",
+            "state_topic": topic,
+            "device": {
+                "identifiers": [node_id],
+                "name": self._device_name,
+                "manufacturer": self.inverter_manufacturer,
+                "model": f"{self.inverter_model} SN:{self._logger_serial}",
+                "serial_number": str(self._logger_serial),
+                "sw_version": f"deye-inverter-mqtt with {self.get_id()}",
+            },
+        }
         if device_class == "enum":
-            discover_config = {
-                "name": observation.sensor.name,
-                "unique_id": self._get_unique_id(observation.sensor.name),
-                "force_update": True,
-                "device_class": device_class,
-                "options": enum_options,
-                "availability_topic": f"{self._config.mqtt.topic_prefix}/status",
-                "state_topic": topic,
-                "device": {
-                    "identifiers": [node_id],
-                    "name": self._device_name,
-                    "manufacturer": self.inverter_manufacturer,
-                    "model": f"{self.inverter_model} SN:{self._logger_serial}",
-                    "serial_number": str(self._logger_serial),
-                    "sw_version": f"deye-inverter-mqtt with {self.get_id()}",
-                },
-            }
+            del discover_config["unit_of_measurement"]
+            discover_config["options"] = enum_options
         else:
-            discover_config = {
-                "name": observation.sensor.name,
-                "unique_id": self._get_unique_id(observation.sensor.name),
-                "force_update": True,
-                "device_class": device_class,
-                "state_class": state_class,
-                "unit_of_measurement": self._adapt_unit(observation.sensor.unit),
-                "availability_topic": f"{self._config.mqtt.topic_prefix}/status",
-                "state_topic": topic,
-                "device": {
-                    "identifiers": [node_id],
-                    "name": self._device_name,
-                    "manufacturer": self.inverter_manufacturer,
-                    "model": f"{self.inverter_model} SN:{self._logger_serial}",
-                    "serial_number": str(self._logger_serial),
-                    "sw_version": f"deye-inverter-mqtt with {self.get_id()}",
-                },
-            }
+            discover_config["state_class"] = state_class
+
         payload = json.dumps(discover_config)
         self._mqtt_client.publish(discovery_topic, payload)
 
