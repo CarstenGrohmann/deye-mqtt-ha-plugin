@@ -94,8 +94,9 @@ updating the "time of use" (ToU) configuration has not been implemented yet.
 
 ## Changelog
 
-### 2024-12-11
-* Add support for sensor device class "enum" and some other sensors by [@daniel-deptula](https://github.com/daniel-deptula)
+### 2024-12-20
+* Add support for SG01HP3 inverters by [@daniel-deptula](https://github.com/daniel-deptula)
+* Add support for sensor device class "enum" by [@daniel-deptula](https://github.com/daniel-deptula)
 
 ### 2024-11-20
 * Add support for active power regulation

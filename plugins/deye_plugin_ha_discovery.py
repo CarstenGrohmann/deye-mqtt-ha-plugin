@@ -30,7 +30,7 @@ from deye_observation import Observation
 from deye_plugin_loader import DeyePluginContext
 
 
-RELEASE_DATE = "2024-11-20"
+RELEASE_DATE = "2024-12-20"
 
 
 class DeyeHADiscovery(DeyeEventProcessor):
