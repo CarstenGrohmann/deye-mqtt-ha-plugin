@@ -29,7 +29,11 @@ updating the "time of use" (ToU) configuration has not been implemented yet.
     # Topics not published to HA
     # Use : as separator, supports Unix shell-style wildcards *, ?, [seq] and
     # [!seq] as implemented with Python fnmatch,
-    DEYE_HA_PLUGIN_IGNORE_TOPIC_PATTERNS=uptime:*/pv[234]/*
+    DEYE_HA_PLUGIN_IGNORE_TOPIC_PATTERNS=uptime:ac/relay_status:*/pv[234]/*
+    # If the sensor value isn't updated for DEYE_HA_PLUGIN_EXPIRE_AFTER seconds, it'll expire / be marked as "unavailable" in HA
+    # It must be greater than DEYE_DATA_READ_INTERVAL or DEYE_PUBLISH_ON_CHANGE_MAX_INTERVAL (if used)
+    # If the value is not defined, sensor values never expire
+    DEYE_HA_PLUGIN_EXPIRE_AFTER=600
     ```
 
 3. Install the plugin from `plugins` directory as described in ["How to start the docker container with custom plugins"](https://github.com/kbialek/deye-inverter-mqtt#how-to-start-the-docker-container-with-custom-plugins) and restart container to
@@ -93,6 +97,10 @@ updating the "time of use" (ToU) configuration has not been implemented yet.
 * [Deye solar inverter MQTT bridge](https://github.com/kbialek/deye-inverter-mqtt)
 
 ## Changelog
+
+### 2025-02-27
+* Add support for the first binary_sensor - on/off-grid status (by [@daniel-deptula](https://github.com/daniel-deptula))
+* Add support for the "expire_after" parameter for all sensors (by [@daniel-deptula](https://github.com/daniel-deptula))
 
 ### 2024-12-20
 * Add support for SG01HP3 inverters by [@daniel-deptula](https://github.com/daniel-deptula)
