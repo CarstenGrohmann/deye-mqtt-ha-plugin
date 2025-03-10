@@ -58,7 +58,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
     """MQTT prefix used by homeassistant"""
 
     expire_after: int | None = None
-    """expire_after parameter for HA sensors"""
+    """Expire_after parameter for HA sensors"""
 
     def __init__(self, plugin_context: DeyePluginContext):
         self._config: DeyeConfig = plugin_context.config
