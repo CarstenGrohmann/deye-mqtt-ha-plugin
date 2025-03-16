@@ -57,6 +57,9 @@ class DeyeHADiscovery(DeyeEventProcessor):
     ha_discovery_prefix: str | None
     """MQTT prefix used by homeassistant"""
 
+    expire_after: int | None = None
+    """Expire_after parameter for HA sensors"""
+
     def __init__(self, plugin_context: DeyePluginContext):
         self._config: DeyeConfig = plugin_context.config
         self._logging = logging.getLogger(DeyeHADiscovery.__name__)
@@ -89,6 +92,9 @@ class DeyeHADiscovery(DeyeEventProcessor):
             )
         else:
             self._ignore_user_topic_patterns = tuple(self._ignore_default_topic_pattern)
+        value = DeyeEnv.string("DEYE_HA_PLUGIN_EXPIRE_AFTER", "")
+        if value:
+            self.expire_after = int(value)
 
     def get_id(self):
         return f"HA Discovery Plugin version {RELEASE_DATE}"
@@ -120,13 +126,14 @@ class DeyeHADiscovery(DeyeEventProcessor):
 
     @staticmethod
     @functools.cache
-    def _get_device_class(topic: str) -> str:
-        """Return device_class based on a given topic
+    def _get_device_class(topic: str) -> tuple:
+        """Return device_class and platform based on a given topic
 
         Args:
             topic (str): MQTT topic for the sensor value
         """
         device_class = ""
+        platform = "sensor"
 
         # topic: ac/l*/voltage
         # topic: dc/pv*/voltage
@@ -202,7 +209,11 @@ class DeyeHADiscovery(DeyeEventProcessor):
         elif topic == "inverter/status":
             device_class = "enum"
 
-        return device_class
+        elif topic == "ac/ongrid":
+            device_class = "power"
+            platform = "binary_sensor"
+
+        return device_class, platform
 
     @staticmethod
     @functools.cache
@@ -271,6 +282,16 @@ class DeyeHADiscovery(DeyeEventProcessor):
 
         return options
 
+    @staticmethod
+    @functools.cache
+    def _get_payload_on_off(topic: str) -> tuple:
+        """Return payload_on and payload_off values for a binary sensor with a given topic
+
+        Args:
+            topic (str): MQTT topic for the sensor value
+        """
+        return "True", "False"
+
     def publish_sensor_information(self, topic: str, observation: Observation):
         """Send HA discovery messages about available sensors
 
@@ -281,17 +302,12 @@ class DeyeHADiscovery(DeyeEventProcessor):
         mqtt_topic_suffix = observation.sensor.mqtt_topic_suffix
         self._logging.debug("Create HA discovery for %s", mqtt_topic_suffix)
 
-        device_class = self._get_device_class(mqtt_topic_suffix)
+        device_class, platform = self._get_device_class(mqtt_topic_suffix)
         if not device_class:
             self._logging.error(
                 "Unable to determinate device_class for topic %s", mqtt_topic_suffix
             )
             return
-
-        if device_class == "enum":
-            enum_options = self._get_options(mqtt_topic_suffix)
-        else:
-            state_class = self._get_state_class(mqtt_topic_suffix)
 
         discovery_prefix = self.ha_discovery_prefix
         node_id = f"{self.component_prefix}_{self._config.logger.serial_number}"
@@ -299,14 +315,13 @@ class DeyeHADiscovery(DeyeEventProcessor):
 
         # discovery topic format:
         # <discovery_prefix>/<component>/[<node_id>/]<object_id>/config
-        discovery_topic = f"{discovery_prefix}/sensor/{node_id}/{object_id}/config"
+        discovery_topic = f"{discovery_prefix}/{platform}/{node_id}/{object_id}/config"
 
         discover_config = {
             "name": observation.sensor.name,
             "unique_id": self._get_unique_id(observation.sensor.name),
             "force_update": True,
             "device_class": device_class,
-            "unit_of_measurement": self._adapt_unit(observation.sensor.unit),
             "availability_topic": f"{self._config.mqtt.topic_prefix}/status",
             "state_topic": topic,
             "device": {
@@ -318,11 +333,18 @@ class DeyeHADiscovery(DeyeEventProcessor):
                 "sw_version": f"deye-inverter-mqtt with {self.get_id()}",
             },
         }
-        if device_class == "enum":
-            del discover_config["unit_of_measurement"]
-            discover_config["options"] = enum_options
+
+        if self.expire_after is not None:
+            discover_config["expire_after"] = self.expire_after
+
+        if platform == "binary_sensor":
+            discover_config["payload_on"], discover_config["payload_off"] = self._get_payload_on_off(mqtt_topic_suffix)
         else:
-            discover_config["state_class"] = state_class
+            if device_class == "enum":
+                discover_config["options"] = self._get_options(mqtt_topic_suffix)
+            else:
+                discover_config["state_class"] = self._get_state_class(mqtt_topic_suffix)
+                discover_config["unit_of_measurement"] = self._adapt_unit(observation.sensor.unit)
 
         payload = json.dumps(discover_config)
         self._mqtt_client.publish(discovery_topic, payload)
