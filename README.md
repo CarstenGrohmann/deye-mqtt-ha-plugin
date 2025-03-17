@@ -36,8 +36,9 @@ updating the "time of use" (ToU) configuration has not been implemented yet.
     DEYE_HA_PLUGIN_EXPIRE_AFTER=600
     ```
 
-3. Install the plugin from `plugins` directory as described in ["How to start the docker container with custom plugins"](https://github.com/kbialek/deye-inverter-mqtt#how-to-start-the-docker-container-with-custom-plugins) and restart container to
-   activate the changes in `config.env`.
+3. Install the plugin from `plugins` directory as described in
+   ["How to start the docker container with custom plugins"](https://github.com/kbialek/deye-inverter-mqtt#how-to-start-the-docker-container-with-custom-plugins) and recreate the container to activate the
+   changes in `config.env`, as a simple restart of the container will not do this.
 
 4. Switch to the Home Assistant and install [Utility Meter](https://www.home-assistant.io/integrations/utility_meter/)
 
