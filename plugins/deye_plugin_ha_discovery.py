@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Copyright (c) 2024 Carsten Grohmann
+# Copyright (c) 2024,2025 Carsten Grohmann
 
 import fnmatch
 import functools
