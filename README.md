@@ -110,19 +110,19 @@ updating the "time of use" (ToU) configuration has not been implemented yet.
 ### 2024-11-20
 * Add support for active power regulation
 * Internal code changes
-* Use new public API to create MQTT topic
+* Use the new public API to create MQTT topic
   (requires [Deye solar inverter MQTT bridge](https://github.com/kbialek/deye-inverter-mqtt)
   at least version 2024.11.1)
- 
+
 ### 2024-10-22
 * Add device classes for total_energy_bought and daily_energy_sold
 
 ### 2024-10-03
-* Fix wrong unit for uptime sensor
+* Fix the wrong unit for uptime sensor
 
 ### 2024-09-20
 * README extended
-* All energy topics uses state class "total_increasing" now
+* All energy topics use state class "total_increasing" now
 * Add more MQTT topics
 
 ### 2024-08-30
