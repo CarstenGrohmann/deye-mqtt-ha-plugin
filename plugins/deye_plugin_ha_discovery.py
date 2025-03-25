@@ -52,7 +52,11 @@ class DeyeHADiscovery(DeyeEventProcessor):
     """Inverter model"""
 
     component_prefix = "deye_inverter_mqtt"
-    """Prefix for the component name"""
+    """\
+    Prefix for the component name.
+
+    Use underscore to separate parts to avoid problems with the MQTT topic.
+    """
 
     ha_discovery_prefix: str | None
     """MQTT prefix used by homeassistant"""
@@ -109,7 +113,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
     @staticmethod
     @functools.cache
     def _fmt_topic(topic: str) -> str:
-        """Format topic to include into another topic string"""
+        """Format the topic to include in another topic string"""
         res = topic.lower()
         res = res.replace("/", "_")
         res = res.strip()
@@ -350,7 +354,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
         self._mqtt_client.publish(discovery_topic, payload)
 
     def publish_active_power_regulation(self):
-        """Send HA discovery message for active power regulation feature"""
+        """Send a HA discovery message for active power regulation feature"""
         component_id = f"{self.component_prefix}_{self._config.logger.serial_number}"
         node_id = f"{self.component_prefix}_{self._config.logger.serial_number}"
 
@@ -393,7 +397,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
         self._mqtt_client.publish(discovery_topic, payload)
 
     def publish_status_information(self):
-        """Send HA discovery messages about the application and logger status"""
+        """Send a HA discovery messages about the application and logger status"""
         for name, mqtt_topic, device_class, state_topic in [
             ("MQTT bridge", "application_status", "running", "status"),
             ("Inverter logger", "logger_status", "connectivity", "logger_status"),
