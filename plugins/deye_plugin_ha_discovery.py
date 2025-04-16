@@ -22,6 +22,7 @@ import functools
 import json
 import logging
 import re
+from typing import Any
 
 from deye_config import DeyeConfig, DeyeEnv
 from deye_events import DeyeEventProcessor, DeyeEventList, DeyeObservationEvent
@@ -270,7 +271,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
 
     @staticmethod
     @functools.cache
-    def _get_options(topic: str) -> str:
+    def _get_options(topic: str) -> list | list[str]:
         """Return entity options based on a given topic
 
         Args:
@@ -484,7 +485,7 @@ class DeyePlugin:
                 "Config item DEYE_HA_PLUGIN_HA_MQTT_PREFIX not set - do not instantiate DeyeHADiscovery plugin"
             )
 
-    def get_event_processors(self) -> [DeyeEventProcessor]:
+    def get_event_processors(self) -> list[Any]:
         """Provides a list of custom event processors"""
         if self.publisher:
             return [self.publisher]
