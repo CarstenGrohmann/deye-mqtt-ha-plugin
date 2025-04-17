@@ -12,6 +12,8 @@ Energy usage diagram provided by Home Assistant filled with data from a "Deye so
 This integration can read and update the active power regulation feature's value if it's enabled. However, reading and
 updating the "time of use" (ToU) configuration has not been implemented yet.
 
+Multi-inverter support (`DEYE_LOGGER_COUNT > 0`) is not supported.
+
 ## Installation
 
 1. Install Deye solar inverter MQTT bridge
@@ -98,6 +100,9 @@ updating the "time of use" (ToU) configuration has not been implemented yet.
 * [Deye solar inverter MQTT bridge](https://github.com/kbialek/deye-inverter-mqtt)
 
 ## Changelog
+
+### 2025-04-17
+* Plugin does not start if multi-inverter setup is active
 
 ### 2025-02-27
 * Add support for the first binary_sensor - on/off-grid status (by [@daniel-deptula](https://github.com/daniel-deptula))
