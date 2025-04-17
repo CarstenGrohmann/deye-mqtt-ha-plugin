@@ -471,7 +471,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
 class DeyePlugin:
     """Plugin entrypoint
 
-    The plugin loader first instantiates DeyePlugin class, and then gets event processors from it.
+    The plugin loader first instantiates the DeyePlugin class and then gets event processors from it.
     """
 
     def __init__(self, plugin_context: DeyePluginContext):
@@ -481,13 +481,20 @@ class DeyePlugin:
             plugin_context (DeyePluginContext): provides access to core service components, e.g. config
         """
         _log = logging.getLogger(DeyePlugin.__name__)
-        if DeyeEnv.string("DEYE_HA_PLUGIN_HA_MQTT_PREFIX", None):
-            _log.info("Instantiate DeyeHADiscovery plugin")
-            self.publisher = DeyeHADiscovery(plugin_context)
-        else:
+
+        if DeyeEnv.integer("DEYE_LOGGER_COUNT", 0):
+            _log.info('Unsupported multi-inverter configuration found - do not instantiate '
+                      'DeyeHADiscovery plugin')
+            return
+        if not DeyeEnv.string("DEYE_HA_PLUGIN_HA_MQTT_PREFIX", None):
             _log.info(
-                "Config item DEYE_HA_PLUGIN_HA_MQTT_PREFIX not set - do not instantiate DeyeHADiscovery plugin"
+                "Missing config item DEYE_HA_PLUGIN_HA_MQTT_PREFIX - do not instantiate "
+                "DeyeHADiscovery plugin"
             )
+            return
+
+        _log.info("Instantiate DeyeHADiscovery plugin")
+        self.publisher = DeyeHADiscovery(plugin_context)
 
     def get_event_processors(self) -> list[Any]:
         """Provides a list of custom event processors"""
