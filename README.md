@@ -24,18 +24,40 @@ Multi-inverter support (`DEYE_LOGGER_COUNT > 0`) is not supported.
     ```bash
     # Home Assistant Integration
     # ==========================
+
+    # NOTE: Single or double quotation marks to enclose the string are not required and
+    #       are not allowed.
+
+    # Enable this plugin
     PLUGINS_ENABLED=deye_plugin_ha_discovery
+
+    # MQTT prefix for all topics published to Home Assistant
     DEYE_HA_PLUGIN_HA_MQTT_PREFIX=homeassistant
+
+    # Inverter manufacturer
     DEYE_HA_PLUGIN_INVERTER_MANUFACTURER=<your manufacturer>
+
+    # Inverter model
     DEYE_HA_PLUGIN_INVERTER_MODEL=<your inverter>
+
     # Topics not published to HA
     # Use : as separator, supports Unix shell-style wildcards *, ?, [seq] and
     # [!seq] as implemented with Python fnmatch,
     DEYE_HA_PLUGIN_IGNORE_TOPIC_PATTERNS=uptime:ac/relay_status:*/pv[234]/*
-    # If the sensor value isn't updated for DEYE_HA_PLUGIN_EXPIRE_AFTER seconds, it'll expire / be marked as "unavailable" in HA
+
+    # If the sensor value isn't updated for DEYE_HA_PLUGIN_EXPIRE_AFTER seconds, it'll expire / be
+    # marked as "unavailable" in Home Assistant.
     # It must be greater than DEYE_DATA_READ_INTERVAL or DEYE_PUBLISH_ON_CHANGE_MAX_INTERVAL (if used)
     # If the value is not defined, sensor values never expire
     DEYE_HA_PLUGIN_EXPIRE_AFTER=600
+
+    # Use MQTT topic instead of sensor name in unique_id
+    # CAUTION:
+    #   Activate this option for new installations only.
+    #   It will break existing integration as it changes the unique_id of all sensors.
+    #   New sensors will be created with the same name as the existing sensors. You can
+    #   merge these sensors manually with db_maint.py.
+    DEYE_HA_PLUGIN_USE_TOPIC_IN_UNIQUE_ID=yes
     ```
 
 3. Install the plugin from `plugins` directory as described in

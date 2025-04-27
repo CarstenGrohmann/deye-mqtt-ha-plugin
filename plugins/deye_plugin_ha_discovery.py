@@ -46,6 +46,9 @@ class DeyeHADiscovery(DeyeEventProcessor):
     _ignore_default_topic_pattern: list[str] = ["settings/active_power_regulation"]
     """List of topics that are always ignored"""
 
+    _use_topic_in_unique_id: bool = False
+    """Use MQTT topic instead of sensor name in unique_id"""
+
     inverter_manufacturer: str | None = None
     """Inverter manufacturer"""
 
@@ -73,6 +76,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
         self._logger_serial: str = ""
         self._device_name: str | None = None
         self._ignore_user_topic_patterns = ()
+        self._use_topic_in_unique_ids = False
         self._active_power_regulation_enabled = DeyeEnv.boolean(
             "DEYE_FEATURE_ACTIVE_POWER_REGULATION", False
         )
@@ -100,6 +104,9 @@ class DeyeHADiscovery(DeyeEventProcessor):
         value = DeyeEnv.string("DEYE_HA_PLUGIN_EXPIRE_AFTER", "")
         if value:
             self.expire_after = int(value)
+        self._use_topic_in_unique_id = DeyeEnv.boolean(
+            "DEYE_HA_PLUGIN_USE_TOPIC_IN_UNIQUE_ID", False
+        )
 
     def get_id(self):
         return f"HA Discovery Plugin version {RELEASE_DATE}"
@@ -121,12 +128,22 @@ class DeyeHADiscovery(DeyeEventProcessor):
         return res
 
     @functools.cache
-    def _get_unique_id(self, sensor_name: str) -> str:
+    def _get_unique_id(self, sensor_name: str, topic_name: str) -> str:
         """Return a unique id for the current sensor"""
-        # Do not change the prefix, as a changed unique ID generates new sensors.
-        # The prefix differs from self.component_prefix = "deye_inverter_mqtt"
-        _unique_id = f"deye_mqtt_inverter_{self._config.logger.serial_number}_{sensor_name}".lower()
+        assert sensor_name or topic_name
+        if self._use_topic_in_unique_id:
+            prefix = self.component_prefix
+        else:
+            # Do not change the prefix, as a changed unique ID generates new sensors.
+            # The prefix differs from self.component_prefix = "deye_inverter_mqtt"
+            prefix = "deye_mqtt_inverter"
+        if self._use_topic_in_unique_id and topic_name:
+            component = topic_name
+        else:
+            component = sensor_name
+        _unique_id = f"{prefix}_{self._config.logger.serial_number}_{component}".lower()
         _unique_id = _unique_id.replace(" ", "_")
+        _unique_id = _unique_id.replace("/", "_")
         return _unique_id
 
     @staticmethod
@@ -324,7 +341,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
 
         discover_config = {
             "name": observation.sensor.name,
-            "unique_id": self._get_unique_id(observation.sensor.name),
+            "unique_id": self._get_unique_id(observation.sensor.name, mqtt_topic_suffix),
             "force_update": True,
             "device_class": device_class,
             "availability_topic": f"{self._config.mqtt.topic_prefix}/status",
@@ -343,13 +360,19 @@ class DeyeHADiscovery(DeyeEventProcessor):
             discover_config["expire_after"] = self.expire_after
 
         if platform == "binary_sensor":
-            discover_config["payload_on"], discover_config["payload_off"] = self._get_payload_on_off(mqtt_topic_suffix)
+            discover_config["payload_on"], discover_config["payload_off"] = (
+                self._get_payload_on_off(mqtt_topic_suffix)
+            )
         else:
             if device_class == "enum":
                 discover_config["options"] = self._get_options(mqtt_topic_suffix)
             else:
-                discover_config["state_class"] = self._get_state_class(mqtt_topic_suffix)
-                discover_config["unit_of_measurement"] = self._adapt_unit(observation.sensor.unit)
+                discover_config["state_class"] = self._get_state_class(
+                    mqtt_topic_suffix
+                )
+                discover_config["unit_of_measurement"] = self._adapt_unit(
+                    observation.sensor.unit
+                )
 
         payload = json.dumps(discover_config)
         self._mqtt_client.publish(discovery_topic, payload)
@@ -376,7 +399,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
         # TOPIC: {MQTT_TOPIC_PREFIX}/settings/active_power_regulation/command
         discover_config = {
             "name": "Active Power Regulation",
-            "unique_id": self._get_unique_id("Active Power Regulation"),
+            "unique_id": self._get_unique_id("", "settings/active_power_regulation"),
             "unit_of_measurement": "%",
             "availability_topic": f"{self._config.mqtt.topic_prefix}/status",
             "min": 0,
@@ -398,7 +421,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
         self._mqtt_client.publish(discovery_topic, payload)
 
     def publish_status_information(self):
-        """Send a HA discovery messages about the application and logger status"""
+        """Send HA discovery messages about the application and logger status"""
         for name, mqtt_topic, device_class, state_topic in [
             ("MQTT bridge", "application_status", "running", "status"),
             ("Inverter logger", "logger_status", "connectivity", "logger_status"),
@@ -413,7 +436,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
                 "device_class": device_class,
                 "entity_category": "diagnostic",
                 "force_update": True,
-                "unique_id": self._get_unique_id(mqtt_topic),
+                "unique_id": self._get_unique_id("", mqtt_topic),
                 "state_topic": f"{self._config.mqtt.topic_prefix}/{state_topic}",
                 "payload_on": "online",
                 "payload_off": "offline",
@@ -481,10 +504,13 @@ class DeyePlugin:
             plugin_context (DeyePluginContext): provides access to core service components, e.g. config
         """
         _log = logging.getLogger(DeyePlugin.__name__)
+        self.publisher = None
 
         if DeyeEnv.integer("DEYE_LOGGER_COUNT", 0):
-            _log.info('Unsupported multi-inverter configuration found - do not instantiate '
-                      'DeyeHADiscovery plugin')
+            _log.info(
+                "Unsupported multi-inverter configuration found - do not instantiate "
+                "DeyeHADiscovery plugin"
+            )
             return
         if not DeyeEnv.string("DEYE_HA_PLUGIN_HA_MQTT_PREFIX", None):
             _log.info(
