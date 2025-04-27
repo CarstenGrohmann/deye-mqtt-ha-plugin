@@ -352,7 +352,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
                 "manufacturer": self.inverter_manufacturer,
                 "model": f"{self.inverter_model} SN:{self._logger_serial}",
                 "serial_number": str(self._logger_serial),
-                "sw_version": f"deye-inverter-mqtt with {self.get_id()}",
+                "sw_version": f'{self.component_prefix.replace("_", "-")} with {self.get_id()}',
             },
         }
 
