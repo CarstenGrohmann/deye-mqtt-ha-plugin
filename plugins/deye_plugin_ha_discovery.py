@@ -127,7 +127,6 @@ class DeyeHADiscovery(DeyeEventProcessor):
         res = res.strip()
         return res
 
-    @functools.cache
     def _get_unique_id(self, sensor_name: str, topic_name: str) -> str:
         """Return a unique id for the current sensor"""
         assert sensor_name or topic_name
@@ -141,7 +140,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
             component = topic_name
         else:
             component = sensor_name
-        _unique_id = f"{prefix}_{self._config.logger.serial_number}_{component}".lower()
+        _unique_id = f"{prefix}_{self._logger_serial}_{component}".lower()
         _unique_id = _unique_id.replace(" ", "_")
         _unique_id = _unique_id.replace("/", "_")
         return _unique_id
@@ -332,7 +331,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
             return
 
         discovery_prefix = self.ha_discovery_prefix
-        node_id = f"{self.component_prefix}_{self._config.logger.serial_number}"
+        node_id = f"{self.component_prefix}_{self._logger_serial}"
         object_id = self._fmt_topic(mqtt_topic_suffix)
 
         # discovery topic format:
@@ -379,13 +378,12 @@ class DeyeHADiscovery(DeyeEventProcessor):
 
     def publish_active_power_regulation(self):
         """Send a HA discovery message for active power regulation feature"""
-        component_id = f"{self.component_prefix}_{self._config.logger.serial_number}"
-        node_id = f"{self.component_prefix}_{self._config.logger.serial_number}"
+        node_id = f"{self.component_prefix}_{self._logger_serial}"
 
         # discovery topic format:
         # <discovery_prefix>/<component>/[<node_id>/]<object_id>/config
         discovery_topic = (
-            f"{self.ha_discovery_prefix}/number/{component_id}/"
+            f"{self.ha_discovery_prefix}/number/{node_id}/"
             "active_power_regulation/config"
         )
 
