@@ -1,3 +1,8 @@
+"""\
+Plugin for the "Deye Solar Inverter MQTT Bridge" which enables automatic
+discovery of all published values in Home Assistant.
+"""
+
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information

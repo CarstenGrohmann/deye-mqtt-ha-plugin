@@ -2,8 +2,8 @@
 
 ## Introduction
 
-This plugin enables Home Assistant to automatically discover all values published by the "Deye Solar Inverter
-MQTT Bridge".
+Plugin for the "Deye Solar Inverter MQTT Bridge" which enables automatic discovery of all published
+values in Home Assistant.
 
 Energy usage diagram provided by Home Assistant filled with data from a "Deye solar inverter MQTT bridge":
 
