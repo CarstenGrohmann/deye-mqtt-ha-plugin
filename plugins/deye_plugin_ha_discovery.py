@@ -51,6 +51,9 @@ class DeyeHADiscovery(DeyeEventProcessor):
     _ignore_default_topic_pattern: list[str] = ["settings/active_power_regulation"]
     """List of topics that are always ignored"""
 
+    _logger_serial: int | None = None
+    """Logger (inverter) serial number"""
+
     _use_topic_in_unique_id: bool = False
     """Use MQTT topic instead of sensor name in unique_id"""
 
@@ -77,7 +80,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
         self._config: DeyeConfig = plugin_context.config
         self._logging = logging.getLogger(DeyeHADiscovery.__name__)
         self._mqtt_client: DeyeMqttClient = plugin_context.mqtt_client
-        self._logger_serial: str = ""
+        self._logger_serial = None
         self._device_name: str | None = None
         self._ignore_user_topic_patterns = ()
         self._use_topic_in_unique_ids = False
