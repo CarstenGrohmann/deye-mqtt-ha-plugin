@@ -77,7 +77,6 @@ class DeyeHADiscovery(DeyeEventProcessor):
         self._config: DeyeConfig = plugin_context.config
         self._logging = logging.getLogger(DeyeHADiscovery.__name__)
         self._mqtt_client: DeyeMqttClient = plugin_context.mqtt_client
-        self._logger_index: int | None = None
         self._logger_serial: str = ""
         self._device_name: str | None = None
         self._ignore_user_topic_patterns = ()
@@ -345,7 +344,9 @@ class DeyeHADiscovery(DeyeEventProcessor):
 
         discover_config = {
             "name": observation.sensor.name,
-            "unique_id": self._get_unique_id(observation.sensor.name, mqtt_topic_suffix),
+            "unique_id": self._get_unique_id(
+                observation.sensor.name, mqtt_topic_suffix
+            ),
             "force_update": True,
             "device_class": device_class,
             "availability_topic": f"{self._config.mqtt.topic_prefix}/status",
@@ -458,13 +459,12 @@ class DeyeHADiscovery(DeyeEventProcessor):
     def process(self, events: DeyeEventList):
         """Create a new HA discovery topic for all events"""
 
-        self._logger_index = events.logger_index
         self._logger_serial = self._config.logger_configs[
-            self._logger_index
+            events.logger_index
         ].serial_number
         self._logging.info(
             "Processing events from logger: %s, SN:%s",
-            self._logger_index,
+            events.logger_index,
             self._logger_serial,
         )
         self._device_name = f"{self.inverter_manufacturer} Inverter MQTT"
@@ -489,7 +489,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
                 continue
 
             topic = self._mqtt_client.build_topic_name(
-                self._logger_index, event.observation.sensor.mqtt_topic_suffix
+                events.logger_index, event.observation.sensor.mqtt_topic_suffix
             )
             self.publish_sensor_information(topic, event.observation)
 
