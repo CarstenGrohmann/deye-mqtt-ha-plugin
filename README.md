@@ -2,31 +2,31 @@
 
 ## Introduction
 
-Plugin for the "Deye Solar Inverter MQTT Bridge" which enables automatic discovery of all published
-values in Home Assistant.
+This plugin connects your "Deye Solar Inverter MQTT Bridge" directly to Home Assistant, making it easy to automatically discover and use all the values published by your inverter.
 
-Energy usage diagram provided by Home Assistant filled with data from a "Deye solar inverter MQTT bridge":
+With this integration, you can visualize your solar energy data right inside Home Assistant. Here’s an example of an energy usage diagram, powered by data from your Deye inverter:
 
 ![Screenshot of energy usage diagram provided by Home Assistant filled with data from a Deye solar inverter](./screenshot_energy_usage.png)
 
-This integration can read and update the active power regulation feature's value if it's enabled. However, reading and
-updating the "time of use" (ToU) configuration has not been implemented yet.
+You can also read and update the active power regulation feature (if enabled). Please note: reading and updating the "time of use" (ToU) configuration isn’t available yet.
 
-Multi-inverter support (`DEYE_LOGGER_COUNT > 0`) is not supported.
+Multi-inverter setups (`DEYE_LOGGER_COUNT > 0`) aren’t supported at this time.
+
+## Requirements
+
+* [Deye solar inverter MQTT bridge](https://github.com/kbialek/deye-inverter-mqtt), version 2024.11.1 or newer
 
 ## Installation
 
-1. Install Deye solar inverter MQTT bridge
+1. First, install the Deye Solar Inverter MQTT Bridge.
 
-2. Expand the Deye Solar Inverter MQTT Bridge configuration file `config.env` with a customized version of this
-   section:
+2. Next, update your `config.env` configuration file for the MQTT bridge. Add or adjust the following section to enable Home Assistant integration:
 
     ```bash
     # Home Assistant Integration
     # ==========================
 
-    # NOTE: Single or double quotation marks to enclose the string are not required and
-    #       are not allowed.
+    # NOTE: Do not use quotation marks around these values.
 
     # Enable this plugin
     PLUGINS_ENABLED=deye_plugin_ha_discovery
@@ -60,13 +60,14 @@ Multi-inverter support (`DEYE_LOGGER_COUNT > 0`) is not supported.
     DEYE_HA_PLUGIN_USE_TOPIC_IN_UNIQUE_ID=yes
     ```
 
-3. Install the plugin from `plugins` directory as described in
-   ["How to start the docker container with custom plugins"](https://github.com/kbialek/deye-inverter-mqtt#how-to-start-the-docker-container-with-custom-plugins) and recreate the container to activate the
-   changes in `config.env`, as a simple restart of the container will not do this.
+3. Install the plugin from the `plugins` directory. For details, see
+   ["How to start the docker container with custom plugins"](https://github.com/kbialek/deye-inverter-mqtt#how-to-start-the-docker-container-with-custom-plugins).  
+   Don’t forget to recreate the container after updating `config.env`—just restarting won’t apply your changes.
 
-4. Switch to the Home Assistant and install [Utility Meter](https://www.home-assistant.io/integrations/utility_meter/)
+4. In Home Assistant, install the [Utility Meter](https://www.home-assistant.io/integrations/utility_meter/) integration.
 
-5. Configure a Utility Meter helper to reset the daily production counter at midnight.
+5. Set up a Utility Meter helper to reset your daily production counter at midnight.  
+   You can do this in your `configuration.yaml`:
 
     ```bash
     # Example configuration.yaml entry
@@ -77,48 +78,42 @@ Multi-inverter support (`DEYE_LOGGER_COUNT > 0`) is not supported.
         cycle: daily
     ```
 
-    or graphically
+    Or use the graphical interface:
 
     ![Screenshot of Utility Meter setup part 1](./screenshot_setup_utility_meter_1.png)
 
     ![Screenshot of Utility Meter setup part 2](./screenshot_setup_utility_meter_2.png)
 
-## Requirements
-
-* [Deye solar inverter MQTT bridge](https://github.com/kbialek/deye-inverter-mqtt) version 2024.11.1 or newer
-
 ## Troubleshooting
 
-1. Ensure that the container `deye-mqtt` has the required minimum version
+1. Make sure your `deye-mqtt` container is running the required minimum version.
 
-2. Check if the plugin has been loaded.
+2. Check if the plugin loaded successfully:
 
     ```bash
     docker logs deye-mqtt
     ```
 
-   When starting the container after loading this plugin, a message similar to the following line should appear in
-   the container log.
+   After starting the container, you should see a message like:
 
     ```
     DeyePluginLoader - INFO - Loading plugin: 'deye_plugin_ha_discovery'
     ```
 
-    If this line does not appear, you should check the installation of the plugin.
+   If you don’t see this, double-check your plugin installation.
 
-3. Check log of the `deye-mqtt` container for errors.
+3. Look for errors in the `deye-mqtt` container logs.
 
-    On demand increase the detail of the logging in `config.env` to `LOG_LEVEL=DEBUG` and restart the container.
+   If needed, increase the logging detail in `config.env` by setting `LOG_LEVEL=DEBUG` and restart the container.
 
-4. Checking the content published in the MQTT broker. You can use a graphical tool such as the [MQTT Explorer](https://mqtt-explorer.com/) for this.
-
+4. To inspect what’s being published to your MQTT broker, try a graphical tool like [MQTT Explorer](https://mqtt-explorer.com/).
 
 ## Resources
 
 * [Project Page](https://carstengrohmann.de/deye-mqtt-ha-plugin.html)
 * [Source Code](https://git.sr.ht/~carstengrohmann/deye-mqtt-ha-plugin)
-  (mirrored on [GitHub](https://github.com/CarstenGrohmann/deye-mqtt-ha-plugin))
-* [Home Assistent](https://www.home-assistant.io/)
+  (also mirrored on [GitHub](https://github.com/CarstenGrohmann/deye-mqtt-ha-plugin))
+* [Home Assistant](https://www.home-assistant.io/)
 * [Deye solar inverter MQTT bridge](https://github.com/kbialek/deye-inverter-mqtt)
 
 ## Changelog
@@ -157,8 +152,7 @@ Multi-inverter support (`DEYE_LOGGER_COUNT > 0`) is not supported.
 
 ## Known Bugs/Issues
 
-Check the project [issue tracker](https://todo.sr.ht/~carstengrohmann/deye-mqtt-ha-plugin)
-for current open bugs. New bugs can be reported there also.
+Check out the project’s [issue tracker](https://todo.sr.ht/~carstengrohmann/deye-mqtt-ha-plugin)
 
 ## License
 
