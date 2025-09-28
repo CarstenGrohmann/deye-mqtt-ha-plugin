@@ -14,7 +14,14 @@ Multi-inverter setups (`DEYE_LOGGER_COUNT > 0`) aren’t supported at this time.
 
 ## Requirements
 
-* [Deye solar inverter MQTT bridge](https://github.com/kbialek/deye-inverter-mqtt), version 2024.11.1 or newer
+To ensure a reliable setup, please review the following prerequisites:
+
+* The [Deye solar inverter MQTT bridge](https://github.com/kbialek/deye-inverter-mqtt) must be installed and running, with at least version 2024.11.1.
+* Your inverter must be supported by the Deye MQTT bridge. Refer to the [supported inverters and metrics](https://github.com/kbialek/deye-inverter-mqtt#bulb-supported-inverters-and-metrics) to verify compatibility.
+* Your inverter should be active.
+* The Deye MQTT bridge must be configured to read values from your inverter and successfully publish them to your MQTT broker.
+
+Once these requirements are met, you can connect your solar system to Home Assistant and make full use of your energy data!
 
 ## Installation
 
