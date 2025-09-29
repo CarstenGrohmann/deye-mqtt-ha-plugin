@@ -64,7 +64,7 @@ Once these requirements are met, you can connect your solar system to Home Assis
     #   It will break existing integration as it changes the unique_id of all sensors.
     #   New sensors will be created with the same name as the existing sensors. You can
     #   merge these sensors manually with db_maint.py.
-    DEYE_HA_PLUGIN_USE_TOPIC_IN_UNIQUE_ID=yes
+    DEYE_HA_PLUGIN_USE_TOPIC_IN_UNIQUE_ID=true
     ```
 
 3. Install the plugin from the `plugins` directory. For details, see
