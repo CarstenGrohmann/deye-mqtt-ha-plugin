@@ -25,9 +25,9 @@ Once these requirements are fulfilled, you’re ready to connect your solar syst
 
 ## Installation
 
-1. First, install the Deye Solar Inverter MQTT Bridge.
-
-2. Next, update your `config.env` configuration file for the MQTT bridge. Add or adjust the following section to enable Home Assistant integration:
+1. Identify how many PV inputs your inverter has. PV inputs are the individual strings or chains of solar panels connected to your inverter, each providing its own set of measurements.
+2. Install and configure the Deye Solar Inverter MQTT Bridge.
+3. Add the following section to your `config.env` configuration file for the MQTT bridge to enable Home Assistant integration:
 
     ```bash
     # Home Assistant Integration
@@ -67,13 +67,17 @@ Once these requirements are fulfilled, you’re ready to connect your solar syst
     DEYE_HA_PLUGIN_USE_TOPIC_IN_UNIQUE_ID=true
     ```
 
-3. Install the plugin from the `plugins` directory. For details, see
+4. Check and, if necessary, adjust `DEYE_HA_PLUGIN_HA_MQTT_PREFIX`. Replace `<your manufacturer>` and `<your inverter>` with the actual manufacturer and model of your inverter. For example, for a Deye SUN-3.6K-SG01HP3 inverter, use:
+    ```bash
+    DEYE_HA_PLUGIN_INVERTER_MANUFACTURER=Deye
+    DEYE_HA_PLUGIN_INVERTER_MODEL=SUN-3.6K-SG01HP3
+    ```
+5. Adjust `DEYE_HA_PLUGIN_IGNORE_TOPIC_PATTERNS` according to your number of PV inputs. By default, the plugin ignores all PV inputs except the first one to keep things manageable in Home Assistant. If you want to include all PV inputs, simply remove `:*/pv[234]/*` from the value.
+6. Install the plugin from the `plugins` directory. For details, see
    ["How to start the docker container with custom plugins"](https://github.com/kbialek/deye-inverter-mqtt#how-to-start-the-docker-container-with-custom-plugins).  
-   Don’t forget to recreate the container after updating `config.env`—just restarting won’t apply your changes.
-
-4. In Home Assistant, install the [Utility Meter](https://www.home-assistant.io/integrations/utility_meter/) integration.
-
-5. Set up a Utility Meter helper to reset your daily production counter at midnight.  
+   Remember to recreate the container after updating `config.env`—just restarting won’t apply your changes.
+7. In Home Assistant, install the [Utility Meter](https://www.home-assistant.io/integrations/utility_meter/) integration.
+8. Set up a Utility Meter helper to reset your daily production counter at midnight.  
    You can do this in your `configuration.yaml`:
 
     ```bash
