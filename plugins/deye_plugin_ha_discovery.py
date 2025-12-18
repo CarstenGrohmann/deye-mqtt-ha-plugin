@@ -231,6 +231,11 @@ class DeyeHADiscovery(DeyeEventProcessor):
         elif topic.endswith("/soc"):
             device_class = "battery"
 
+        # topic: settings/system_time
+        elif topic == "settings/system_time":
+            device_class = "timestamp"
+            # native_value = "int"
+
         elif topic == "uptime":
             device_class = "duration"
 
@@ -265,17 +270,19 @@ class DeyeHADiscovery(DeyeEventProcessor):
         """
         state_class = ""
 
+        # topic: ac/(daily|total)_energy_(bought|sold)
         # topic: battery/(daily|total)_(charge|discharge)
         # topic: (day|total)_energy
         # topic: dc/pv*/(day|total)_energy
+        # topic: settings/system_time
         # topic: uptime
-        # topic: ac/(daily|total)_energy_(bought|sold)
         if (
             topic.endswith("_charge")
             or topic.endswith("_discharge")
             or topic.endswith("_energy")
             or topic.endswith("_energy_bought")
             or topic.endswith("_energy_sold")
+            or topic == "settings/system_time"
             or topic == "uptime"
         ):
             state_class = "total_increasing"
@@ -363,6 +370,9 @@ class DeyeHADiscovery(DeyeEventProcessor):
                 "sw_version": f'{self.component_prefix.replace("_", "-")} with {self.get_id()}',
             },
         }
+
+        if mqtt_topic_suffix == "settings/system_time":
+            discover_config["native_value"] = "int"
 
         if self.expire_after is not None:
             discover_config["expire_after"] = self.expire_after
