@@ -83,7 +83,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
         self._logger_serial = None
         self._device_name: str | None = None
         self._ignore_user_topic_patterns = ()
-        self._use_topic_in_unique_ids = False
+        self._use_topic_in_unique_id = False
         self._active_power_regulation_enabled = DeyeEnv.boolean(
             "DEYE_FEATURE_ACTIVE_POWER_REGULATION", False
         )
