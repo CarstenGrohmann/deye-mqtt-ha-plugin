@@ -181,7 +181,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
         # topic: bms/*/discharge_max_current
         elif (
             topic.endswith("/current")
-            or topic.endswith("charge_current_limit")
+            or topic.endswith("/charge_current_limit")
             or topic.endswith("/charging_max_current")
             or topic.endswith("/discharge_max_current")
         ):
@@ -228,7 +228,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
 
         # topic: battery/soc
         # topic: bms/*/soc
-        elif topic.endswith("/soc") or topic.startswith("bms/"):
+        elif topic.endswith("/soc"):
             device_class = "battery"
 
         elif topic == "uptime":
