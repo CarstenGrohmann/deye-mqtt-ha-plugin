@@ -169,7 +169,7 @@ Check out the project’s [issue tracker](https://todo.sr.ht/~carstengrohmann/de
 
 This project is licensed under the Apache 2.0 license.
 
-> Copyright (c) 2024,2025 Carsten Grohmann, mail &lt;add at here&gt; carstengrohmann.de
+> Copyright (c) 2024-2026 Carsten Grohmann, mail &lt;add at here&gt; carstengrohmann.de
 >
 > Licensed to the Apache Software Foundation (ASF) under one
 > or more contributor license agreements.  See the NOTICE file
