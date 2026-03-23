@@ -48,7 +48,10 @@ class DeyeHADiscovery(DeyeEventProcessor):
     _ignore_user_topic_patterns: tuple = ()
     """List of user-specific topics to be ignored"""
 
-    _ignore_default_topic_pattern: list[str] = ["settings/active_power_regulation"]
+    _ignore_default_topic_pattern: list[str] = [
+        "settings/active_power_regulation",
+        "ac/relay_status",
+    ]
     """List of topics that are always ignored"""
 
     _logger_serial: int | None = None
@@ -179,13 +182,29 @@ class DeyeHADiscovery(DeyeEventProcessor):
         # topic: bms/*/charge_current_limit
         # topic: bms/*/discharge_current_limit
         # topic: bms/*/discharge_max_current
+        # topic: settings/battery/maximum_*_charge_current
+        # topic: settings/battery/maximum_discharge_current
         elif (
             topic.endswith("/current")
             or topic.endswith("/charge_current_limit")
             or topic.endswith("/charging_max_current")
             or topic.endswith("/discharge_max_current")
+            or topic.endswith("_charge_current")
+            or topic.endswith("_discharge_current")
         ):
             device_class = "current"
+
+        # topic: ac/active_power
+        # topic: ac/l*/power
+        # topic: ac/total_grid_power
+        # topic: ac/total_internal_power
+        # topic: ac/ups/power
+        # topic: dc/pv*/power
+        # topic: dc/total_power
+        # topic: operating_power
+        # topic: settings/solar_sell_max_power
+        elif topic.endswith("power"):
+            device_class = "power"
 
         # topic: battery/(daily|total)_(charge|discharge)
         # topic: (day|total)_energy
@@ -203,16 +222,10 @@ class DeyeHADiscovery(DeyeEventProcessor):
         elif re.match(r"ac/l\d+/ct/(internal|external)", topic):
             device_class = "power"
 
-        # topic: ac/active_power
-        # topic: ac/l*/power
-        # topic: dc/pv*/power
-        # topic: dc/total_power
-        # topic: operating_power
-        elif topic.endswith("power"):
-            device_class = "power"
-
         # topic: ac/freq
-        elif topic.endswith("/freq"):
+        # topic: ac/frequency
+        # topic: ac/grid_frequency
+        elif topic.endswith("/freq") or topic.endswith("frequency"):
             device_class = "frequency"
 
         # topic: ac/temperature
@@ -234,13 +247,17 @@ class DeyeHADiscovery(DeyeEventProcessor):
         # topic: settings/system_time
         elif topic == "settings/system_time":
             device_class = "timestamp"
-            # native_value = "int"
 
         elif topic == "uptime":
             device_class = "duration"
 
-        elif topic == "inverter/status":
+        elif topic in ("inverter/status", "settings/workmode"):
             device_class = "enum"
+
+        # topic: settings/battery/grid_charge
+        # topic: settings/solar_sell
+        elif topic in ("settings/battery/grid_charge", "settings/solar_sell"):
+            platform = "binary_sensor"
 
         elif topic == "ac/ongrid":
             device_class = "power"
@@ -314,6 +331,8 @@ class DeyeHADiscovery(DeyeEventProcessor):
         options = []
         if topic == "inverter/status":
             options = ["standby", "selfcheck", "normal", "alarm", "fault"]
+        elif topic == "settings/workmode":
+            options = ["selling_first", "zero_export_to_load", "zero_export_to_ct"]
 
         return options
 
@@ -325,6 +344,9 @@ class DeyeHADiscovery(DeyeEventProcessor):
         Args:
             topic (str): MQTT topic for the sensor value
         """
+        # SingleRegisterSensor with print_format="{:.0f}" publishes "1"/"0"
+        if topic in ("settings/battery/grid_charge", "settings/solar_sell"):
+            return "1", "0"
         return "True", "False"
 
     def publish_sensor_information(self, topic: str, observation: Observation):
@@ -338,9 +360,11 @@ class DeyeHADiscovery(DeyeEventProcessor):
         self._logging.debug("Create HA discovery for %s", mqtt_topic_suffix)
 
         device_class, platform = self._get_device_class(mqtt_topic_suffix)
-        if not device_class:
+        if not device_class and platform == "sensor":
             self._logging.error(
-                "Unable to determinate device_class for topic %s", mqtt_topic_suffix
+                "Unable to determinate device_class for topic %s on platform %s",
+                mqtt_topic_suffix,
+                platform,
             )
             return
 
@@ -358,7 +382,6 @@ class DeyeHADiscovery(DeyeEventProcessor):
                 observation.sensor.name, mqtt_topic_suffix
             ),
             "force_update": True,
-            "device_class": device_class,
             "availability_topic": f"{self._config.mqtt.topic_prefix}/status",
             "state_topic": topic,
             "device": {
@@ -371,6 +394,9 @@ class DeyeHADiscovery(DeyeEventProcessor):
             },
         }
 
+        if device_class:
+            discover_config["device_class"] = device_class
+
         if mqtt_topic_suffix == "settings/system_time":
             discover_config["native_value"] = "int"
 
@@ -378,9 +404,10 @@ class DeyeHADiscovery(DeyeEventProcessor):
             discover_config["expire_after"] = self.expire_after
 
         if platform == "binary_sensor":
-            discover_config["payload_on"], discover_config["payload_off"] = (
-                self._get_payload_on_off(mqtt_topic_suffix)
-            )
+            (
+                discover_config["payload_on"],
+                discover_config["payload_off"],
+            ) = self._get_payload_on_off(mqtt_topic_suffix)
         else:
             if device_class == "enum":
                 discover_config["options"] = self._get_options(mqtt_topic_suffix)

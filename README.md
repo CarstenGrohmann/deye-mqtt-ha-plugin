@@ -129,6 +129,9 @@ Once these requirements are fulfilled, you’re ready to connect your solar syst
 
 ## Changelog
 
+### 2026-03-23
+* Add HA discovery for new sg01hp3/sg04lp3 topics
+
 ### 2025-04-17
 * Plugin does not start if multi-inverter setup is active
 
