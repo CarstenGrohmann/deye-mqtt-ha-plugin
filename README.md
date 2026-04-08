@@ -8,9 +8,24 @@ With this integration, you can visualize your solar energy data right inside Hom
 
 ![Screenshot of energy usage diagram provided by Home Assistant filled with data from a Deye solar inverter](./screenshot_energy_usage.png)
 
-You can also read and update the active power regulation feature (if enabled). Please note: reading and updating the "time of use" (ToU) configuration isn’t available yet.
+The plugin also supports setups with multiple inverters. Each inverter appears as a separate device in Home Assistant, with its own sensors and connection status:
 
-Multi-inverter setups (`DEYE_LOGGER_COUNT > 0`) aren’t supported at this time.
+![Screenshot of the Home Assistant device list showing two Deye inverters as
+separate devices](./screenshot_mqtt_devices.png)
+
+A single status card gives you a live overview of all connected loggers and the MQTT bridge:
+
+![Screenshot of the Home Assistant status card showing both loggers connected
+and the bridge running](./screenshot_status_all.png)
+
+Each inverter exposes the same set of metrics, labeled with its identifier:
+
+![Screenshot of the Home Assistant sensor list for one inverter showing all
+available metrics](./screenshot_all_sensors.png)
+
+You can also read and update the active power regulation feature (if enabled).
+
+Please note: reading and updating the "time of use" (ToU) configuration isn’t available yet.
 
 ## Requirements
 
@@ -18,7 +33,7 @@ Before you get started, please make sure the following conditions are met:
 
 1. Your inverter is supported by the Deye MQTT bridge. You can check compatibility in the [supported inverters and metrics](https://github.com/kbialek/deye-inverter-mqtt#bulb-supported-inverters-and-metrics) list.
 2. Your inverter is switched on and can be reached by the Deye MQTT bridge.
-3. The [Deye solar inverter MQTT bridge](https://github.com/kbialek/deye-inverter-mqtt) is installed in at least version 2024.11.1.
+3. The [Deye solar inverter MQTT bridge](https://github.com/kbialek/deye-inverter-mqtt) is installed in at least version 2026.02.2.
 4. The Deye MQTT bridge is set up to read values from your inverter and successfully publish them to your MQTT broker.
 
 Once these requirements are fulfilled, you’re ready to connect your solar system to Home Assistant and take full advantage of your energy data!
@@ -49,7 +64,7 @@ Once these requirements are fulfilled, you’re ready to connect your solar syst
 
     # Topics not published to HA
     # Use : as separator, supports Unix shell-style wildcards *, ?, [seq] and
-    # [!seq] as implemented with Python fnmatch,
+    # [!seq] as implemented with Python fnmatch
     DEYE_HA_PLUGIN_IGNORE_TOPIC_PATTERNS=uptime:ac/relay_status:*/pv[234]/*
 
     # If the sensor value isn't updated for DEYE_HA_PLUGIN_EXPIRE_AFTER seconds, it'll expire / be
@@ -67,17 +82,39 @@ Once these requirements are fulfilled, you’re ready to connect your solar syst
     DEYE_HA_PLUGIN_USE_TOPIC_IN_UNIQUE_ID=true
     ```
 
-4. Check and, if necessary, adjust `DEYE_HA_PLUGIN_HA_MQTT_PREFIX`. Replace `<your manufacturer>` and `<your inverter>` with the actual manufacturer and model of your inverter. For example, for a Deye SUN-3.6K-SG01HP3 inverter, use:
+4. Replace <your manufacturer> and <your inverter> with the actual values. If needed, also adjust `DEYE_HA_PLUGIN_HA_MQTT_PREFIX`:
+
     ```bash
     DEYE_HA_PLUGIN_INVERTER_MANUFACTURER=Deye
     DEYE_HA_PLUGIN_INVERTER_MODEL=SUN-3.6K-SG01HP3
     ```
-5. Adjust `DEYE_HA_PLUGIN_IGNORE_TOPIC_PATTERNS` according to your number of PV inputs. By default, the plugin ignores all PV inputs except the first one to keep things manageable in Home Assistant. If you want to include all PV inputs, simply remove `:*/pv[234]/*` from the value.
-6. Install the plugin from the `plugins` directory. For details, see
+
+5. For multi-inverter setups, add the following to `config.env`:
+
+    ```bash
+    # Sample multi-inverter configuration with two loggers
+    DEYE_LOGGER_COUNT=2
+
+    DEYE_LOGGER_1_IP_ADDRESS=192.168.1.100
+    DEYE_LOGGER_1_SERIAL_NUMBER=1234567801
+    DEYE_LOGGER_1_DESC=balcony left
+    # DEYE_LOGGER_1_PROTOCOL=at
+
+    DEYE_LOGGER_2_IP_ADDRESS=192.168.1.101
+    DEYE_LOGGER_2_SERIAL_NUMBER=1234567802
+    DEYE_LOGGER_2_DESC=balcony right
+    # DEYE_LOGGER_2_PROTOCOL=at
+
+    # enables multi-inverter data aggregation and publishing
+    DEYE_FEATURE_MULTI_INVERTER_DATA_AGGREGATOR=true
+    ```
+
+6. Adjust `DEYE_HA_PLUGIN_IGNORE_TOPIC_PATTERNS` according to your number of PV inputs. By default, the plugin ignores all PV inputs except the first one to keep things manageable in Home Assistant. If you want to include all PV inputs, simply remove `:*/pv[234]/*` from the value.
+7. Install the plugin from the `plugins` directory. For details, see
    ["How to start the docker container with custom plugins"](https://github.com/kbialek/deye-inverter-mqtt#how-to-start-the-docker-container-with-custom-plugins).  
    Remember to recreate the container after updating `config.env`—just restarting won’t apply your changes.
-7. In Home Assistant, install the [Utility Meter](https://www.home-assistant.io/integrations/utility_meter/) integration.
-8. Set up a Utility Meter helper to reset your daily production counter at midnight.  
+8. In Home Assistant, install the [Utility Meter](https://www.home-assistant.io/integrations/utility_meter/) integration.
+9. Set up a Utility Meter helper to reset your daily production counter at midnight.  
    You can do this in your `configuration.yaml`:
 
     ```bash
@@ -129,11 +166,14 @@ Once these requirements are fulfilled, you’re ready to connect your solar syst
 
 ## Changelog
 
+### 2026-04-08
+* Add multi-inverter support
+
 ### 2026-03-23
 * Add HA discovery for new sg01hp3/sg04lp3 topics
 
 ### 2025-04-17
-* Plugin does not start if multi-inverter setup is active
+* Refuse to start if multi-inverter setup is active (not yet supported)
 
 ### 2025-02-27
 * Add support for the first binary_sensor - on/off-grid status (by [@daniel-deptula](https://github.com/daniel-deptula))
@@ -157,7 +197,6 @@ Once these requirements are fulfilled, you’re ready to connect your solar syst
 * Fix the wrong unit for uptime sensor
 
 ### 2024-09-20
-* README extended
 * All energy topics use state class "total_increasing" now
 * Add more MQTT topics
 

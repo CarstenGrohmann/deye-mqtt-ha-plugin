@@ -36,34 +36,46 @@ from deye_observation import Observation
 from deye_plugin_loader import DeyePluginContext
 
 
-RELEASE_DATE = "2025-04-17"
+RELEASE_DATE = "2026-04-08"
 
 
 class DeyeHADiscovery(DeyeEventProcessor):
     """Plugin for HA discovery topics"""
 
-    _active_power_regulation_enabled: bool = False
+    _active_power_regulation_enabled: bool
     """Publish control for active power regulation"""
 
-    _ignore_user_topic_patterns: tuple = ()
+    _multi_inverter_logger_count: int
+    """Number of inverters configured in multi-inverter mode"""
+
+    _multi_inverter_data_aggregator_enabled: bool
+    """Data aggregation enabled in multi-inverter mode"""
+
+    _device_name: str
+    """Device name shown in HA"""
+
+    _ignore_topic_patterns: tuple
     """List of user-specific topics to be ignored"""
 
-    _ignore_default_topic_pattern: list[str] = [
+    _ignore_default_topic_patterns: tuple[str] = (
         "settings/active_power_regulation",
         "ac/relay_status",
-    ]
+    )
     """List of topics that are always ignored"""
 
-    _logger_serial: int | None = None
+    _logger_descriptions: dict[int, str]
+    """Logger descriptions, keyed by 1-based logger index"""
+
+    _logger_serial: int
     """Logger (inverter) serial number"""
 
-    _use_topic_in_unique_id: bool = False
+    _use_topic_in_unique_id: bool
     """Use MQTT topic instead of sensor name in unique_id"""
 
-    inverter_manufacturer: str | None = None
+    inverter_manufacturer: str
     """Inverter manufacturer"""
 
-    inverter_model: str | None = None
+    inverter_model: str
     """Inverter model"""
 
     component_prefix = "deye_inverter_mqtt"
@@ -73,23 +85,47 @@ class DeyeHADiscovery(DeyeEventProcessor):
     Use underscore to separate parts to avoid problems with the MQTT topic.
     """
 
+    _sw_version: str
+    """Software version string for HA device map"""
+
     ha_discovery_prefix: str | None
     """MQTT prefix used by homeassistant"""
 
-    expire_after: int | None = None
+    expire_after: int | None
     """Expire_after parameter for HA sensors"""
 
+    _config: DeyeConfig
+    """Core configuration"""
+
+    _log: logging.Logger
+    """Logger for this plugin"""
+
+    _logger_index: int
+    """1-based index of the logger (inverter) currently being processed"""
+
+    _mqtt_client: DeyeMqttClient
+    """MQTT client for publishing discovery messages"""
+
     def __init__(self, plugin_context: DeyePluginContext):
-        self._config: DeyeConfig = plugin_context.config
-        self._logging = logging.getLogger(DeyeHADiscovery.__name__)
-        self._mqtt_client: DeyeMqttClient = plugin_context.mqtt_client
-        self._logger_serial = None
-        self._device_name: str | None = None
-        self._ignore_user_topic_patterns = ()
-        self._use_topic_in_unique_id = False
+        self.expire_after = None
+        self.ha_discovery_prefix = None
+        self.inverter_model = ""
+        self.inverter_manufacturer = ""
         self._active_power_regulation_enabled = DeyeEnv.boolean(
             "DEYE_FEATURE_ACTIVE_POWER_REGULATION", False
         )
+        self._config = plugin_context.config
+        self._device_name = ""
+        self._log = logging.getLogger(DeyeHADiscovery.__name__)
+        self._logger_descriptions = {}
+        self._logger_index = 0
+        self._logger_serial = 0
+        self._ignore_topic_patterns = ()
+        self._mqtt_client = plugin_context.mqtt_client
+        self._multi_inverter_logger_count = 0
+        self._multi_inverter_data_aggregator_enabled = False
+        self._sw_version = f"deye-inverter-mqtt with {self.get_id()}"
+        self._use_topic_in_unique_id = False
 
     def initialize(self):
         super().initialize()
@@ -106,31 +142,46 @@ class DeyeHADiscovery(DeyeEventProcessor):
         self.inverter_model = self.inverter_model.strip('"')
         value = DeyeEnv.string("DEYE_HA_PLUGIN_IGNORE_TOPIC_PATTERNS", "")
         if value:
-            self._ignore_user_topic_patterns = tuple(
-                value.split(":") + self._ignore_default_topic_pattern
+            self._ignore_topic_patterns = (
+                tuple(value.split(":")) + self._ignore_default_topic_patterns
             )
         else:
-            self._ignore_user_topic_patterns = tuple(self._ignore_default_topic_pattern)
+            self._ignore_topic_patterns = tuple(self._ignore_default_topic_patterns)
         value = DeyeEnv.string("DEYE_HA_PLUGIN_EXPIRE_AFTER", "")
         if value:
             self.expire_after = int(value)
         self._use_topic_in_unique_id = DeyeEnv.boolean(
             "DEYE_HA_PLUGIN_USE_TOPIC_IN_UNIQUE_ID", False
         )
+        if self._use_topic_in_unique_id:
+            self._log.debug(
+                "Feature enabled: Use MQTT topic instead of sensor name in unique_id"
+            )
+        self._multi_inverter_logger_count = DeyeEnv.integer("DEYE_LOGGER_COUNT", 0)
+        if self._multi_inverter_logger_count:
+            self._log.debug("Feature enabled: Multi-inverter setup")
+            self._multi_inverter_data_aggregator_enabled = DeyeEnv.boolean(
+                "DEYE_FEATURE_MULTI_INVERTER_DATA_AGGREGATOR", False
+            )
+            if self._multi_inverter_data_aggregator_enabled:
+                self._log.debug("Feature enabled: Data aggregation")
+            for i in range(1, self._multi_inverter_logger_count + 1):
+                try:
+                    self._logger_descriptions[i] = DeyeEnv.string(
+                        f"DEYE_LOGGER_{i}_DESC"
+                    )
+                except KeyError:
+                    sn = self._config.logger_configs[i - 1].serial_number
+                    self._logger_descriptions[i] = f"SN {sn}"
 
-    def get_id(self):
+    @staticmethod
+    def get_id() -> str:
+        """Return the plugin identification"""
         return f"HA Discovery Plugin version {RELEASE_DATE}"
 
     @staticmethod
-    def _adapt_unit(unit: str):
-        """Map units from deye-inverter-mqtt to Home Assistant"""
-        if unit == "minutes":
-            unit = "min"
-        return unit
-
-    @staticmethod
     @functools.cache
-    def _fmt_topic(topic: str) -> str:
+    def _topic_to_object_id(topic: str) -> str:
         """Format the topic to include in another topic string"""
         res = topic.lower()
         res = res.replace("/", "_")
@@ -146,7 +197,9 @@ class DeyeHADiscovery(DeyeEventProcessor):
             # Do not change the prefix, as a changed unique ID generates new sensors.
             # The prefix differs from self.component_prefix = "deye_inverter_mqtt"
             prefix = "deye_mqtt_inverter"
-        if self._use_topic_in_unique_id and topic_name:
+        if (self._use_topic_in_unique_id and topic_name) or (
+            not sensor_name and topic_name
+        ):
             component = topic_name
         else:
             component = sensor_name
@@ -157,13 +210,13 @@ class DeyeHADiscovery(DeyeEventProcessor):
 
     @staticmethod
     @functools.cache
-    def _get_device_class(topic: str) -> tuple:
+    def _get_device_class(topic: str) -> tuple[str | None, str]:
         """Return device_class and platform based on a given topic
 
         Args:
             topic (str): MQTT topic for the sensor value
         """
-        device_class = ""
+        device_class = None
         platform = "sensor"
 
         # topic: ac/l*/voltage
@@ -231,6 +284,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
         # topic: ac/temperature
         # topic: battery/temperature
         # topic: battery/*/temperature
+        # topic: bms/*/temp
         # topic: radiator_temp
         elif (
             topic.endswith("temperature")
@@ -243,6 +297,11 @@ class DeyeHADiscovery(DeyeEventProcessor):
         # topic: bms/*/soc
         elif topic.endswith("/soc"):
             device_class = "battery"
+
+        # topic: active_power_regulation
+        elif topic == "active_power_regulation":
+            device_class = None
+            platform = "number"
 
         # topic: settings/system_time
         elif topic == "settings/system_time":
@@ -263,6 +322,15 @@ class DeyeHADiscovery(DeyeEventProcessor):
             device_class = "power"
             platform = "binary_sensor"
 
+        elif topic == "application_status":
+            device_class = "running"
+            platform = "binary_sensor"
+
+        # topic: logger_status or logger_status_{N}
+        elif topic.startswith("logger_status"):
+            device_class = "connectivity"
+            platform = "binary_sensor"
+
         return device_class, platform
 
     @staticmethod
@@ -277,6 +345,10 @@ class DeyeHADiscovery(DeyeEventProcessor):
         res = any(fnmatch.fnmatch(topic, pattern) for pattern in ignore_list)
         return res
 
+    def _get_logger_desc(self, idx: int) -> str:
+        """Return a description for the logger (1-based idx) for multi-inverter setups."""
+        return self._logger_descriptions.get(idx, f"SN {self._logger_serial}")
+
     @staticmethod
     @functools.cache
     def _get_state_class(topic: str) -> str:
@@ -285,8 +357,6 @@ class DeyeHADiscovery(DeyeEventProcessor):
         Args:
             topic (str): MQTT topic for the sensor value
         """
-        state_class = ""
-
         # topic: ac/(daily|total)_energy_(bought|sold)
         # topic: battery/(daily|total)_(charge|discharge)
         # topic: (day|total)_energy
@@ -299,8 +369,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
             or topic.endswith("_energy")
             or topic.endswith("_energy_bought")
             or topic.endswith("_energy_sold")
-            or topic == "settings/system_time"
-            or topic == "uptime"
+            or topic in ["settings/system_time", "uptime"]
         ):
             state_class = "total_increasing"
 
@@ -322,7 +391,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
 
     @staticmethod
     @functools.cache
-    def _get_options(topic: str) -> list | list[str]:
+    def _get_options(topic: str) -> list[str]:
         """Return entity options based on a given topic
 
         Args:
@@ -349,6 +418,47 @@ class DeyeHADiscovery(DeyeEventProcessor):
             return "1", "0"
         return "True", "False"
 
+    def _get_discovery_device_map_inverter(
+        self, identifier: str
+    ) -> dict[str, list[str] | str]:
+        """Return the device map for a physical inverter sensor.
+
+        Identifies the sensor as part of the inverter hardware device,
+        including manufacturer and serial number.
+        """
+        return {
+            "identifiers": [identifier],
+            "manufacturer": self.inverter_manufacturer,
+            "model": self.inverter_model,
+            "name": self._device_name,
+            "serial_number": str(self._logger_serial),
+            "sw_version": self._sw_version,
+        }
+
+    def _get_discovery_device_map_bridge(
+        self, identifier: str
+    ) -> dict[str, list[str] | str]:
+        """Return the device map for bridge and logger status sensors.
+
+        Status sensors represent the software bridge, not the inverter
+        hardware — so serial number is omitted.
+        """
+        return {
+            "identifiers": [identifier],
+            "manufacturer": self.inverter_manufacturer,
+            "model": "Status MQTT Bridge",
+            "name": self._device_name,
+            "sw_version": self._sw_version,
+        }
+
+    def _fmt_sensor_name(self, sensor_name: str) -> str:
+        """Format the sensor name to include in the HA discovery structure"""
+        return (
+            f"{sensor_name} ({self._logger_descriptions[self._logger_index]})"
+            if self._multi_inverter_logger_count
+            else sensor_name
+        )
+
     def publish_sensor_information(self, topic: str, observation: Observation):
         """Send HA discovery messages about available sensors
 
@@ -357,159 +467,227 @@ class DeyeHADiscovery(DeyeEventProcessor):
             observation (Observation): Sensor values
         """
         mqtt_topic_suffix = observation.sensor.mqtt_topic_suffix
-        self._logging.debug("Create HA discovery for %s", mqtt_topic_suffix)
+        sensor_name = observation.sensor.name
+        node_id = f"{self.component_prefix}_{self._logger_serial}"
 
         device_class, platform = self._get_device_class(mqtt_topic_suffix)
-        if not device_class and platform == "sensor":
-            self._logging.error(
-                "Unable to determinate device_class for topic %s on platform %s",
-                mqtt_topic_suffix,
-                platform,
-            )
-            return
 
-        discovery_prefix = self.ha_discovery_prefix
-        node_id = f"{self.component_prefix}_{self._logger_serial}"
-        object_id = self._fmt_topic(mqtt_topic_suffix)
-
-        # discovery topic format:
-        # <discovery_prefix>/<component>/[<node_id>/]<object_id>/config
-        discovery_topic = f"{discovery_prefix}/{platform}/{node_id}/{object_id}/config"
-
-        discover_config = {
-            "name": observation.sensor.name,
-            "unique_id": self._get_unique_id(
-                observation.sensor.name, mqtt_topic_suffix
-            ),
-            "force_update": True,
+        kwargs: dict[str, Any] = {
             "availability_topic": f"{self._config.mqtt.topic_prefix}/status",
-            "state_topic": topic,
-            "device": {
-                "identifiers": [node_id],
-                "name": self._device_name,
-                "manufacturer": self.inverter_manufacturer,
-                "model": f"{self.inverter_model} SN:{self._logger_serial}",
-                "serial_number": str(self._logger_serial),
-                "sw_version": f'{self.component_prefix.replace("_", "-")} with {self.get_id()}',
-            },
+            "node_id": node_id,
+            "unique_id": self._get_unique_id(sensor_name, mqtt_topic_suffix),
         }
 
-        if device_class:
-            discover_config["device_class"] = device_class
+        if self.expire_after is not None:
+            kwargs["expire_after"] = self.expire_after
 
         if mqtt_topic_suffix == "settings/system_time":
-            discover_config["native_value"] = "int"
-
-        if self.expire_after is not None:
-            discover_config["expire_after"] = self.expire_after
+            kwargs["value_template"] = "{{ as_datetime(value) }}"
 
         if platform == "binary_sensor":
-            (
-                discover_config["payload_on"],
-                discover_config["payload_off"],
-            ) = self._get_payload_on_off(mqtt_topic_suffix)
-        else:
-            if device_class == "enum":
-                discover_config["options"] = self._get_options(mqtt_topic_suffix)
-            else:
-                discover_config["state_class"] = self._get_state_class(
-                    mqtt_topic_suffix
-                )
-                discover_config["unit_of_measurement"] = self._adapt_unit(
-                    observation.sensor.unit
-                )
+            kwargs["payload_on"], kwargs["payload_off"] = self._get_payload_on_off(
+                mqtt_topic_suffix
+            )
+        elif device_class == "enum":
+            kwargs["options"] = self._get_options(mqtt_topic_suffix)
+        elif device_class and device_class != "timestamp":
+            kwargs["state_class"] = self._get_state_class(mqtt_topic_suffix)
+            kwargs["unit"] = observation.sensor.unit
 
-        payload = json.dumps(discover_config)
-        self._mqtt_client.publish(discovery_topic, payload)
-
-    def publish_active_power_regulation(self):
-        """Send a HA discovery message for active power regulation feature"""
-        node_id = f"{self.component_prefix}_{self._logger_serial}"
-
-        # discovery topic format:
-        # <discovery_prefix>/<component>/[<node_id>/]<object_id>/config
-        discovery_topic = (
-            f"{self.ha_discovery_prefix}/number/{node_id}/"
-            "active_power_regulation/config"
+        self._send_discovery_message(
+            self._fmt_sensor_name(sensor_name),
+            mqtt_topic_suffix,
+            state_topic=topic,
+            platform=platform,
+            device_class=device_class,
+            device_type="inverter",
+            **kwargs,
         )
 
+    def publish_active_power_regulation(self):
+        """Publish a HA number entity for active power regulation (0–120 %).
+
+        Requires DEYE_FEATURE_ACTIVE_POWER_REGULATION=true.
+        """
+        availability_topic = f"{self._config.mqtt.topic_prefix}/status"
         command_topic = (
             f"{self._config.mqtt.topic_prefix}/settings/active_power_regulation/command"
         )
         state_topic = (
             f"{self._config.mqtt.topic_prefix}/settings/active_power_regulation"
         )
+        node_id = f"{self.component_prefix}_{self._logger_serial}"
+        _device_class, platform = self._get_device_class("active_power_regulation")
+        self._send_discovery_message(
+            self._fmt_sensor_name("Active Power Regulation"),
+            "active_power_regulation",
+            state_topic=state_topic,
+            platform=platform,
+            availability_topic=availability_topic,
+            command_topic=command_topic,
+            device_type="inverter",
+            max=120,
+            min=0,
+            mode="slider",
+            node_id=node_id,
+            step=1,
+            unit_of_measurement="%",
+            unique_id=self._get_unique_id("", "settings/active_power_regulation"),
+        )
 
-        # TOPIC: {MQTT_TOPIC_PREFIX}/settings/active_power_regulation/command
-        discover_config = {
-            "name": "Active Power Regulation",
-            "unique_id": self._get_unique_id("", "settings/active_power_regulation"),
-            "unit_of_measurement": "%",
-            "availability_topic": f"{self._config.mqtt.topic_prefix}/status",
-            "min": 0,
-            "max": 120,
-            "mode": "slider",
-            "step": 1,
-            "command_topic": command_topic,
+    def publish_multi_inverter_data_aggregator(self):
+        """Send a HA discovery message for the data aggregation feature"""
+
+        for sensor_name, mqtt_topic_suffix, unit in [
+            ("Aggregated daily energy", "day_energy", "kWh"),
+            ("Aggregated AC active power", "ac/active_power", "W"),
+        ]:
+            device_class, platform = self._get_device_class(mqtt_topic_suffix)
+            self._send_discovery_message(
+                sensor_name,
+                mqtt_topic_suffix,
+                state_topic=f"{self._config.mqtt.topic_prefix}/{mqtt_topic_suffix}",
+                platform=platform,
+                device_class=device_class,
+                unit=unit,
+                availability_topic=f"{self._config.mqtt.topic_prefix}/status",
+            )
+
+    def publish_single_inverter_status(self):
+        """Send HA discovery messages about the application and logger status"""
+        for sensor_name, mqtt_topic_suffix, state_topic in [
+            ("MQTT bridge", "application_status", "status"),
+            ("Inverter logger", "logger_status", "logger_status"),
+        ]:
+            device_class, platform = self._get_device_class(mqtt_topic_suffix)
+            self._send_discovery_message(
+                self._fmt_sensor_name(sensor_name),
+                mqtt_topic_suffix,
+                state_topic=f"{self._config.mqtt.topic_prefix}/{state_topic}",
+                platform=platform,
+                device_class=device_class,
+                entity_category="diagnostic",
+                node_id=f"{self.component_prefix}_{self._config.logger.serial_number}",
+                payload_on="online",
+                payload_off="offline",
+                unique_id=self._get_unique_id("", mqtt_topic_suffix),
+            )
+
+    def publish_multi_inverter_status(self):
+        """\
+        Send HA discovery messages about the application and logger status
+
+        These status messages will be placed in a separate MQTT device in
+        the diagnostic category.
+        """
+        all_states = [
+            ("MQTT bridge", "application_status", "status"),
+        ]
+        for i in range(1, self._multi_inverter_logger_count + 1):
+            desc = f"Logger ({self._get_logger_desc(i)})"
+            all_states.append((desc, f"logger_status_{i}", f"{i}/logger_status"))
+        for sensor_name, mqtt_topic_suffix, state_topic in all_states:
+            device_class, platform = self._get_device_class(mqtt_topic_suffix)
+            self._send_discovery_message(
+                sensor_name,
+                mqtt_topic_suffix,
+                state_topic=f"{self._config.mqtt.topic_prefix}/{state_topic}",
+                platform=platform,
+                device_class=device_class,
+                entity_category="diagnostic",
+                payload_on="online",
+                payload_off="offline",
+            )
+
+    def _send_discovery_message(
+        self,
+        sensor_name: str,
+        mqtt_topic_suffix: str,
+        state_topic: str,
+        platform: str = "sensor",
+        device_class: str | None = None,
+        device_type: str = "bridge",
+        **kwargs,
+    ):
+        """Build and publish a HA discovery config message.
+
+        node_id, unique_id, and unit are consumed from kwargs;
+        the rest is passed through to the payload verbatim.
+        device_type selects the device map: "inverter" or "bridge" (default).
+        """
+        self._log.debug("Create HA discovery for %s", mqtt_topic_suffix)
+
+        if not device_class and platform == "sensor":
+            self._log.error(
+                "Unable to determine device_class for topic %s on platform %s",
+                mqtt_topic_suffix,
+                platform,
+            )
+            return
+
+        node_id = kwargs.pop("node_id", self.component_prefix)
+        object_id = self._topic_to_object_id(mqtt_topic_suffix)
+        unique_id = kwargs.pop("unique_id", object_id)
+        if device_type == "bridge":
+            identifier = f"{self.component_prefix}_bridge"
+            device = self._get_discovery_device_map_bridge(identifier)
+        else:
+            identifier = f"{self.component_prefix}_{self._logger_serial}"
+            device = self._get_discovery_device_map_inverter(identifier)
+
+        # discovery topic format:
+        # <discovery_prefix>/<component>/[<node_id>/]<object_id>/config
+        discovery_topic = (
+            f"{self.ha_discovery_prefix}/{platform}/{node_id}/{object_id}/config"
+        )
+
+        discovery_config = {
+            "name": sensor_name,
+            "device": device,
+            "force_update": True,
             "state_topic": state_topic,
-            "device": {
-                "identifiers": [node_id],
-                "name": self._device_name,
-                "manufacturer": self.inverter_manufacturer,
-                "model": f"{self.inverter_model} SN:{self._logger_serial}",
-                "serial_number": str(self._logger_serial),
-                "sw_version": f"deye-inverter-mqtt with {self.get_id()}",
-            },
+            "unique_id": unique_id,
         }
-        payload = json.dumps(discover_config)
+
+        if device_class:
+            discovery_config["device_class"] = device_class
+        if "unit" in kwargs:
+            unit = kwargs.pop("unit")
+            if unit == "minutes":  # Map units from deye-inverter-mqtt to Home Assistant
+                unit = "min"
+            discovery_config["unit_of_measurement"] = unit
+
+        discovery_config.update(kwargs)
+
+        payload = json.dumps(discovery_config)
         self._mqtt_client.publish(discovery_topic, payload)
 
-    def publish_status_information(self):
-        """Send HA discovery messages about the application and logger status"""
-        for name, mqtt_topic, device_class, state_topic in [
-            ("MQTT bridge", "application_status", "running", "status"),
-            ("Inverter logger", "logger_status", "connectivity", "logger_status"),
-        ]:
-            component_id = (
-                f"{self.component_prefix}_{self._config.logger.serial_number}"
-            )
-            discovery_topic = f"{self.ha_discovery_prefix}/binary_sensor/{component_id}/{mqtt_topic}/config"
-
-            discover_config = {
-                "name": f"{name}",
-                "device_class": device_class,
-                "entity_category": "diagnostic",
-                "force_update": True,
-                "unique_id": self._get_unique_id("", mqtt_topic),
-                "state_topic": f"{self._config.mqtt.topic_prefix}/{state_topic}",
-                "payload_on": "online",
-                "payload_off": "offline",
-                "device": {
-                    "identifiers": [component_id],
-                    "name": self._device_name,
-                    "manufacturer": self.inverter_manufacturer,
-                    "model": f"{self.inverter_model} SN:{self._logger_serial}",
-                    "serial_number": str(self._logger_serial),
-                    "sw_version": f"deye-inverter-mqtt with {self.get_id()}",
-                },
-            }
-            payload = json.dumps(discover_config)
-            self._mqtt_client.publish(discovery_topic, payload)
-
     def process(self, events: DeyeEventList):
-        """Create a new HA discovery topic for all events"""
+        """Create new HA discovery topics for all events"""
 
-        self._logger_serial = self._config.logger_configs[
-            events.logger_index
-        ].serial_number
-        self._logging.info(
+        _logger_index = events.logger_index
+        self._logger_index = _logger_index
+        _config_idx = (
+            _logger_index - 1 if self._multi_inverter_logger_count else _logger_index
+        )
+        self._logger_serial = self._config.logger_configs[_config_idx].serial_number
+        self._log.info(
             "Processing events from logger: %s, SN:%s",
-            events.logger_index,
+            _logger_index,
             self._logger_serial,
         )
-        self._device_name = f"{self.inverter_manufacturer} Inverter MQTT"
+        self._device_name = self._fmt_sensor_name(
+            f"{self.inverter_manufacturer} Inverter MQTT"
+        )
 
-        self.publish_status_information()
+        # publish status and aggregated data only once for all inverters
+        if self._multi_inverter_logger_count == _logger_index:
+            if self._multi_inverter_logger_count:
+                self.publish_multi_inverter_status()
+                if self._multi_inverter_data_aggregator_enabled:
+                    self.publish_multi_inverter_data_aggregator()
+            else:
+                self.publish_single_inverter_status()
 
         if self._active_power_regulation_enabled:
             self.publish_active_power_regulation()
@@ -524,12 +702,12 @@ class DeyeHADiscovery(DeyeEventProcessor):
 
             if self._ignore_topic(
                 event.observation.sensor.mqtt_topic_suffix,
-                self._ignore_user_topic_patterns,
+                self._ignore_topic_patterns,
             ):
                 continue
 
             topic = self._mqtt_client.build_topic_name(
-                events.logger_index, event.observation.sensor.mqtt_topic_suffix
+                _logger_index, event.observation.sensor.mqtt_topic_suffix
             )
             self.publish_sensor_information(topic, event.observation)
 
@@ -549,12 +727,6 @@ class DeyePlugin:
         _log = logging.getLogger(DeyePlugin.__name__)
         self.publisher = None
 
-        if DeyeEnv.integer("DEYE_LOGGER_COUNT", 0):
-            _log.info(
-                "Unsupported multi-inverter configuration found - do not instantiate "
-                "DeyeHADiscovery plugin"
-            )
-            return
         if not DeyeEnv.string("DEYE_HA_PLUGIN_HA_MQTT_PREFIX", None):
             _log.info(
                 "Missing config item DEYE_HA_PLUGIN_HA_MQTT_PREFIX - do not instantiate "
@@ -569,5 +741,4 @@ class DeyePlugin:
         """Provides a list of custom event processors"""
         if self.publisher:
             return [self.publisher]
-        else:
-            return []
+        return []
