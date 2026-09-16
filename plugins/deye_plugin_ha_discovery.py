@@ -54,10 +54,10 @@ class DeyeHADiscovery(DeyeEventProcessor):
     _device_name: str
     """Device name shown in HA"""
 
-    _ignore_topic_patterns: tuple
+    _ignore_topic_patterns: tuple[str, ...]
     """List of user-specific topics to be ignored"""
 
-    _ignore_default_topic_patterns: tuple[str] = (
+    _ignore_default_topic_patterns: tuple[str, ...] = (
         "settings/active_power_regulation",
         "ac/relay_status",
         "timeofuse/*",
