@@ -176,8 +176,9 @@ pytest
 
 ## Changelog
 
-## 2026-09-16
+### 2026-09-16
 * Restore support for bms/*/discharge_current_limit
+* Fix settings/battery/grid_charge published as energy sensor instead of binary_sensor
 
 ### 2026-04-08
 * Add multi-inverter support

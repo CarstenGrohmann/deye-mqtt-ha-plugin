@@ -91,15 +91,9 @@ def test_get_device_class_does_not_treat_all_bms_topics_as_battery(topic):
     assert device_class != "battery"
 
 
-@pytest.mark.xfail(
-    reason=(
-        "settings/battery/grid_charge ends with '_charge', so the earlier "
-        "energy branch catches it first; the dedicated binary_sensor branch "
-        "further down is unreachable for this topic"
-    ),
-    strict=True,
-)
 def test_get_device_class_settings_battery_grid_charge_is_binary_sensor():
+    # settings/battery/grid_charge ends with "_charge"; the exact-match
+    # binary_sensor branch must run before the energy suffix check
     assert DeyeHADiscovery._get_device_class("settings/battery/grid_charge") == (
         None,
         "binary_sensor",

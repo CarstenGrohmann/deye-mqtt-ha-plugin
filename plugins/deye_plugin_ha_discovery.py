@@ -260,6 +260,12 @@ class DeyeHADiscovery(DeyeEventProcessor):
         elif topic.endswith("power"):
             device_class = "power"
 
+        # topic: settings/battery/grid_charge
+        # topic: settings/solar_sell
+        # Must precede the energy check: grid_charge ends with "_charge"
+        elif topic in ("settings/battery/grid_charge", "settings/solar_sell"):
+            platform = "binary_sensor"
+
         # topic: battery/(daily|total)_(charge|discharge)
         # topic: (day|total)_energy
         # topic: dc/pv*/(day|total)_energy
@@ -313,11 +319,6 @@ class DeyeHADiscovery(DeyeEventProcessor):
 
         elif topic in ("inverter/status", "settings/workmode"):
             device_class = "enum"
-
-        # topic: settings/battery/grid_charge
-        # topic: settings/solar_sell
-        elif topic in ("settings/battery/grid_charge", "settings/solar_sell"):
-            platform = "binary_sensor"
 
         elif topic == "ac/ongrid":
             device_class = "power"
