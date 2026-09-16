@@ -409,6 +409,22 @@ class DeyeHADiscovery(DeyeEventProcessor):
 
     @staticmethod
     @functools.cache
+    def _get_value_template(topic: str) -> str | None:
+        """Return a HA value_template based on a given topic
+
+        Args:
+            topic (str): MQTT topic for the sensor value
+        """
+        if topic == "settings/system_time":
+            return "{{ as_datetime(value) }}"
+        # SingleRegisterSensor publishes the raw register value 0..2
+        if topic == "settings/workmode":
+            options = DeyeHADiscovery._get_options(topic)
+            return "{{ " + json.dumps(options) + "[value | int] }}"
+        return None
+
+    @staticmethod
+    @functools.cache
     def _get_payload_on_off(topic: str) -> tuple:
         """Return payload_on and payload_off values for a binary sensor with a given topic
 
@@ -483,8 +499,9 @@ class DeyeHADiscovery(DeyeEventProcessor):
         if self.expire_after is not None:
             kwargs["expire_after"] = self.expire_after
 
-        if mqtt_topic_suffix == "settings/system_time":
-            kwargs["value_template"] = "{{ as_datetime(value) }}"
+        value_template = self._get_value_template(mqtt_topic_suffix)
+        if value_template:
+            kwargs["value_template"] = value_template
 
         if platform == "binary_sensor":
             kwargs["payload_on"], kwargs["payload_off"] = self._get_payload_on_off(

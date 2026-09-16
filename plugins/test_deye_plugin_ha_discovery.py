@@ -127,3 +127,15 @@ def test_get_device_class_requires_path_separator_before_charge_current_limit():
 )
 def test_get_state_class_returns_expected_class(topic, expected):
     assert DeyeHADiscovery._get_state_class(topic) == expected
+
+
+@pytest.mark.parametrize(
+    "topic,expected",
+    [
+        ("settings/system_time", "{{ as_datetime(value) }}"),
+        ("settings/workmode", '{{ ["selling_first", "zero_export_to_load", "zero_export_to_ct"][value | int] }}'),
+        ("ac/active_power", None),
+    ],
+)
+def test_get_value_template_returns_expected_template(topic, expected):
+    assert DeyeHADiscovery._get_value_template(topic) == expected
