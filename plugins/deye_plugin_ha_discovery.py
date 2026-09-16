@@ -248,6 +248,23 @@ class DeyeHADiscovery(DeyeEventProcessor):
         ):
             device_class = "current"
 
+        # topic: ac/apparent_power
+        # topic: ct*/apparent_power
+        # topic: total/*/apparent_power
+        elif topic.endswith("/apparent_power"):
+            device_class = "apparent_power"
+
+        # topic: ac/reactive_power
+        # topic: ct*/reactive_power
+        # topic: total/*/reactive_power
+        elif topic.endswith("/reactive_power"):
+            device_class = "reactive_power"
+
+        # topic: ct*/power_factor
+        # topic: total/*/power_factor
+        elif topic.endswith("/power_factor"):
+            device_class = "power_factor"
+
         # topic: ac/active_power
         # topic: ac/l*/power
         # topic: ac/total_grid_power
@@ -292,11 +309,12 @@ class DeyeHADiscovery(DeyeEventProcessor):
         # topic: battery/temperature
         # topic: battery/*/temperature
         # topic: bms/*/temp
+        # topic: igbt_temp
         # topic: radiator_temp
         elif (
             topic.endswith("temperature")
             or topic.endswith("/temp")
-            or topic == "radiator_temp"
+            or topic.endswith("_temp")
         ):
             device_class = "temperature"
 
@@ -672,8 +690,15 @@ class DeyeHADiscovery(DeyeEventProcessor):
             discovery_config["device_class"] = device_class
         if "unit" in kwargs:
             unit = kwargs.pop("unit")
-            if unit == "minutes":  # Map units from deye-inverter-mqtt to Home Assistant
+            # Map units from deye-inverter-mqtt to Home Assistant
+            if unit == "minutes":
                 unit = "min"
+            # deye-inverter-mqtt publishes "W" for the string inverter's
+            # apparent and reactive power, "Var" for the igen meter
+            elif device_class == "apparent_power":
+                unit = "VA"
+            elif device_class == "reactive_power":
+                unit = "var"
             discovery_config["unit_of_measurement"] = unit
 
         discovery_config.update(kwargs)

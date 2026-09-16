@@ -19,6 +19,8 @@
 
 # Copyright (c) 2024-2026 Carsten Grohmann
 
+import json
+
 import pytest
 
 from deye_plugin_ha_discovery import DeyeHADiscovery
@@ -47,6 +49,13 @@ from deye_plugin_ha_discovery import DeyeHADiscovery
         ("dc/pv1/power", ("power", "sensor")),
         ("ac/l1/ct/internal", ("power", "sensor")),
         ("ac/l1/ct/external", ("power", "sensor")),
+        ("ac/apparent_power", ("apparent_power", "sensor")),
+        ("ct1/apparent_power", ("apparent_power", "sensor")),
+        ("total/1/apparent_power", ("apparent_power", "sensor")),
+        ("ac/reactive_power", ("reactive_power", "sensor")),
+        ("ct1/reactive_power", ("reactive_power", "sensor")),
+        ("ct1/power_factor", ("power_factor", "sensor")),
+        ("total/2/power_factor", ("power_factor", "sensor")),
         # energy
         ("battery/daily_charge", ("energy", "sensor")),
         ("battery/total_discharge", ("energy", "sensor")),
@@ -60,6 +69,7 @@ from deye_plugin_ha_discovery import DeyeHADiscovery
         ("ac/temperature", ("temperature", "sensor")),
         ("battery/temperature", ("temperature", "sensor")),
         ("bms/1/temp", ("temperature", "sensor")),
+        ("igbt_temp", ("temperature", "sensor")),
         ("radiator_temp", ("temperature", "sensor")),
         # battery / soc
         ("battery/soc", ("battery", "sensor")),
@@ -139,3 +149,25 @@ def test_get_state_class_returns_expected_class(topic, expected):
 )
 def test_get_value_template_returns_expected_template(topic, expected):
     assert DeyeHADiscovery._get_value_template(topic) == expected
+
+
+@pytest.fixture
+def plugin(mocker):
+    return DeyeHADiscovery(mocker.MagicMock())
+
+
+@pytest.mark.parametrize(
+    "device_class,unit,expected",
+    [
+        ("duration", "minutes", "min"),
+        ("apparent_power", "VA", "VA"),
+        ("apparent_power", "W", "VA"),
+        ("reactive_power", "Var", "var"),
+        ("reactive_power", "W", "var"),
+        ("power", "W", "W"),
+    ],
+)
+def test_send_discovery_message_maps_unit_to_home_assistant(plugin, device_class, unit, expected):
+    plugin._send_discovery_message("name", "topic", state_topic="state", device_class=device_class, unit=unit)
+    _discovery_topic, payload = plugin._mqtt_client.publish.call_args.args
+    assert json.loads(payload)["unit_of_measurement"] == expected

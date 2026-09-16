@@ -180,6 +180,7 @@ pytest
 * Restore support for bms/*/discharge_current_limit
 * Fix settings/battery/grid_charge published as energy sensor instead of binary_sensor
 * Fix settings/workmode: map the numeric register value to the enum options
+* Add device classes for igbt_temp, power_factor, apparent_power and reactive_power
 
 ### 2026-04-08
 * Add multi-inverter support
