@@ -33,7 +33,7 @@ Before you get started, please make sure the following conditions are met:
 
 1. Your inverter is supported by the Deye MQTT bridge. You can check compatibility in the [supported inverters and metrics](https://github.com/kbialek/deye-inverter-mqtt#bulb-supported-inverters-and-metrics) list.
 2. Your inverter is switched on and can be reached by the Deye MQTT bridge.
-3. The [Deye solar inverter MQTT bridge](https://github.com/kbialek/deye-inverter-mqtt) is installed in at least version 2026.02.2.
+3. The [Deye solar inverter MQTT bridge](https://github.com/kbialek/deye-inverter-mqtt) is installed in at least version 2026.08.1.
 4. The Deye MQTT bridge is set up to read values from your inverter and successfully publish them to your MQTT broker.
 
 Once these requirements are fulfilled, you’re ready to connect your solar system to Home Assistant and take full advantage of your energy data!
@@ -158,12 +158,13 @@ Once these requirements are fulfilled, you’re ready to connect your solar syst
 
 ## Testing
 
-The plugin has automated tests based on pytest. `conftest.py` adds the `deye-inverter-mqtt` submodule to the Python path, so the submodule must be checked out first.
+The plugin has automated tests based on pytest. `conftest.py` adds the `deye-inverter-mqtt` submodule to the Python path, so the submodule must be checked out first. Running `pytest` from the project root also runs the upstream test suite, which requires Python 3.13.
 
 ```bash
 git submodule update --init
-pip install paho-mqtt==1.6.1 libscrc==1.8.1 pytest pytest-cov pytest-mock
-pytest
+python3.13 -m venv venv
+venv/bin/pip install paho-mqtt==1.6.1 python-dotenv tzdata pytest pytest-cov pytest-mock
+venv/bin/pytest
 ```
 
 ## Resources
@@ -182,6 +183,8 @@ pytest
 * Fix settings/workmode: map the numeric register value to the enum options
 * Add device classes for igbt_temp, power_factor, apparent_power and reactive_power
 * Ignore timeofuse/* topics by default until time of use is supported
+* Update deye-inverter-mqtt to 2026.08.1. Note for SG02LP1: upstream renames the BMS1 charge/discharge voltage
+  sensors after this release, which changes their unique_id unless `DEYE_HA_PLUGIN_USE_TOPIC_IN_UNIQUE_ID=true` is set
 
 ### 2026-04-08
 * Add multi-inverter support
