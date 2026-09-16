@@ -101,7 +101,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
     """Logger for this plugin"""
 
     _logger_index: int
-    """1-based index of the logger (inverter) currently being processed"""
+    """index of the logger (inverter) currently being processed"""
 
     _mqtt_client: DeyeMqttClient
     """MQTT client for publishing discovery messages"""
@@ -240,6 +240,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
         elif (
             topic.endswith("/current")
             or topic.endswith("/charge_current_limit")
+            or topic.endswith("/discharge_current_limit")
             or topic.endswith("/charging_max_current")
             or topic.endswith("/discharge_max_current")
             or topic.endswith("_charge_current")

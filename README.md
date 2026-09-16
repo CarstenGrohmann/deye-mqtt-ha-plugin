@@ -156,6 +156,16 @@ Once these requirements are fulfilled, you’re ready to connect your solar syst
 
 4. To inspect what’s being published to your MQTT broker, try a graphical tool like [MQTT Explorer](https://mqtt-explorer.com/).
 
+## Testing
+
+The plugin has automated tests based on pytest. `conftest.py` adds the `deye-inverter-mqtt` submodule to the Python path, so the submodule must be checked out first.
+
+```bash
+git submodule update --init
+pip install paho-mqtt==1.6.1 libscrc==1.8.1 pytest pytest-cov pytest-mock
+pytest
+```
+
 ## Resources
 
 * [Project Page](https://carstengrohmann.de/deye-mqtt-ha-plugin.html)
@@ -165,6 +175,9 @@ Once these requirements are fulfilled, you’re ready to connect your solar syst
 * [Deye solar inverter MQTT bridge](https://github.com/kbialek/deye-inverter-mqtt)
 
 ## Changelog
+
+## 2026-09-16
+* Restore support for bms/*/discharge_current_limit
 
 ### 2026-04-08
 * Add multi-inverter support
