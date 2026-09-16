@@ -60,6 +60,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
     _ignore_default_topic_patterns: tuple[str] = (
         "settings/active_power_regulation",
         "ac/relay_status",
+        "timeofuse/*",
     )
     """List of topics that are always ignored"""
 

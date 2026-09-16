@@ -151,6 +151,20 @@ def test_get_value_template_returns_expected_template(topic, expected):
     assert DeyeHADiscovery._get_value_template(topic) == expected
 
 
+@pytest.mark.parametrize(
+    "topic,expected",
+    [
+        ("settings/active_power_regulation", True),
+        ("ac/relay_status", True),
+        ("timeofuse/enabled", True),
+        ("timeofuse/soc/1", True),
+        ("ac/active_power", False),
+    ],
+)
+def test_ignore_topic_matches_default_patterns(topic, expected):
+    assert DeyeHADiscovery._ignore_topic(topic, DeyeHADiscovery._ignore_default_topic_patterns) is expected
+
+
 @pytest.fixture
 def plugin(mocker):
     return DeyeHADiscovery(mocker.MagicMock())
