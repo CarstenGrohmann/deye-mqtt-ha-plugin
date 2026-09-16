@@ -23,6 +23,7 @@ import json
 
 import pytest
 
+from deye_config import DeyeLoggerConfig
 from deye_plugin_ha_discovery import DeyeHADiscovery
 
 
@@ -185,3 +186,22 @@ def test_send_discovery_message_maps_unit_to_home_assistant(plugin, device_class
     plugin._send_discovery_message("name", "topic", state_topic="state", device_class=device_class, unit=unit)
     _discovery_topic, payload = plugin._mqtt_client.publish.call_args.args
     assert json.loads(payload)["unit_of_measurement"] == expected
+
+
+def test_get_logger_config_single_inverter_uses_index_zero(plugin):
+    plugin._config.logger_configs = [DeyeLoggerConfig(1001, "10.0.0.1", 0, index=0)]
+    assert plugin._get_logger_config(0).serial_number == 1001
+
+
+def test_get_logger_config_multi_inverter_matches_one_based_index(plugin):
+    plugin._config.logger_configs = [
+        DeyeLoggerConfig(1001, "10.0.0.1", 0, index=1),
+        DeyeLoggerConfig(1002, "10.0.0.2", 0, index=2),
+    ]
+    assert plugin._get_logger_config(2).serial_number == 1002
+
+
+def test_get_logger_config_unknown_index_raises(plugin):
+    plugin._config.logger_configs = [DeyeLoggerConfig(1001, "10.0.0.1", 0, index=1)]
+    with pytest.raises(StopIteration):
+        plugin._get_logger_config(0)

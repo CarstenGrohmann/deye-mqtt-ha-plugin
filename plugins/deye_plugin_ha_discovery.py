@@ -29,7 +29,7 @@ import logging
 import re
 from typing import Any
 
-from deye_config import DeyeConfig, DeyeEnv
+from deye_config import DeyeConfig, DeyeEnv, DeyeLoggerConfig
 from deye_events import DeyeEventProcessor, DeyeEventList, DeyeObservationEvent
 from deye_mqtt import DeyeMqttClient
 from deye_observation import Observation
@@ -172,7 +172,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
                         f"DEYE_LOGGER_{i}_DESC"
                     )
                 except KeyError:
-                    sn = self._config.logger_configs[i - 1].serial_number
+                    sn = self._get_logger_config(i).serial_number
                     self._logger_descriptions[i] = f"SN {sn}"
 
     @staticmethod
@@ -365,6 +365,10 @@ class DeyeHADiscovery(DeyeEventProcessor):
         """
         res = any(fnmatch.fnmatch(topic, pattern) for pattern in ignore_list)
         return res
+
+    def _get_logger_config(self, index: int) -> DeyeLoggerConfig:
+        """Return the logger config matching DeyeEventList.logger_index"""
+        return next(c for c in self._config.logger_configs if c.index == index)
 
     def _get_logger_desc(self, idx: int) -> str:
         """Return a description for the logger (1-based idx) for multi-inverter setups."""
@@ -712,10 +716,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
 
         _logger_index = events.logger_index
         self._logger_index = _logger_index
-        _config_idx = (
-            _logger_index - 1 if self._multi_inverter_logger_count else _logger_index
-        )
-        self._logger_serial = self._config.logger_configs[_config_idx].serial_number
+        self._logger_serial = self._get_logger_config(_logger_index).serial_number
         self._log.info(
             "Processing events from logger: %s, SN:%s",
             _logger_index,
