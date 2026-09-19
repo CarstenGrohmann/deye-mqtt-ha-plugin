@@ -591,6 +591,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
                 state_topic=f"{self._config.mqtt.topic_prefix}/{mqtt_topic_suffix}",
                 platform=platform,
                 device_class=device_class,
+                state_class=self._get_state_class(mqtt_topic_suffix),
                 unit=unit,
                 availability_topic=f"{self._config.mqtt.topic_prefix}/status",
             )

@@ -177,6 +177,9 @@ venv/bin/pytest
 
 ## Changelog
 
+### 2026-09-19
+* Add state_class to aggregated sensors
+
 ### 2026-09-16
 * Restore support for bms/*/discharge_current_limit
 * Fix settings/battery/grid_charge published as energy sensor instead of binary_sensor
