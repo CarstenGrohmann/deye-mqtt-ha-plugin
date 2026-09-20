@@ -1,5 +1,11 @@
 # Deye MQTT HA Plugin
 
+> **Multi-inverter setups:** Releases from 2026-04-08 to 2026-09-19 could assign an entity of one
+> inverter to the state topic of the other for one read cycle. The entity then showed the other
+> inverter's value, and Home Assistant utility meters and long-term statistics recorded it as a jump
+> in the energy totals. Fixed in release 2026-09-20 (see Changelog). A script to correct the
+> recorded data will follow.
+
 ## Introduction
 
 This plugin connects your "Deye Solar Inverter MQTT Bridge" directly to Home Assistant, making it easy to automatically discover and use all the values published by your inverter.
@@ -176,6 +182,9 @@ venv/bin/pytest
 * [Deye solar inverter MQTT bridge](https://github.com/kbialek/deye-inverter-mqtt)
 
 ## Changelog
+
+### 2026-09-20
+* Fix threading issue in multi-inverter setups that corrupts energy totals and statistics derived from them
 
 ### 2026-09-19
 * Add state_class to aggregated sensors

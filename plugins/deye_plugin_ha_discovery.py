@@ -27,6 +27,7 @@ import functools
 import json
 import logging
 import re
+import threading
 from typing import Any
 
 from deye_config import DeyeConfig, DeyeEnv, DeyeLoggerConfig
@@ -107,6 +108,9 @@ class DeyeHADiscovery(DeyeEventProcessor):
     _mqtt_client: DeyeMqttClient
     """MQTT client for publishing discovery messages"""
 
+    _process_lock: threading.Lock
+    """Serializes process() calls from the logger threads"""
+
     def __init__(self, plugin_context: DeyePluginContext):
         self.expire_after = None
         self.ha_discovery_prefix = None
@@ -125,6 +129,7 @@ class DeyeHADiscovery(DeyeEventProcessor):
         self._mqtt_client = plugin_context.mqtt_client
         self._multi_inverter_logger_count = 0
         self._multi_inverter_data_aggregator_enabled = False
+        self._process_lock = threading.Lock()
         self._sw_version = f"deye-inverter-mqtt with {self.get_id()}"
         self._use_topic_in_unique_id = False
 
@@ -714,7 +719,12 @@ class DeyeHADiscovery(DeyeEventProcessor):
 
     def process(self, events: DeyeEventList):
         """Create new HA discovery topics for all events"""
+        # One instance serves all logger threads and keeps the logger context
+        # in self; concurrent calls mix serial number and state topic.
+        with self._process_lock:
+            self._process_events(events)
 
+    def _process_events(self, events: DeyeEventList):
         _logger_index = events.logger_index
         self._logger_index = _logger_index
         self._logger_serial = self._get_logger_config(_logger_index).serial_number

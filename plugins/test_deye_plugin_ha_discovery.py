@@ -20,10 +20,15 @@
 # Copyright (c) 2024-2026 Carsten Grohmann
 
 import json
+import threading
+import time
+from datetime import datetime
 
 import pytest
 
 from deye_config import DeyeLoggerConfig
+from deye_events import DeyeEventList, DeyeObservationEvent
+from deye_observation import Observation
 from deye_plugin_ha_discovery import DeyeHADiscovery
 
 
@@ -205,3 +210,33 @@ def test_get_logger_config_unknown_index_raises(plugin):
     plugin._config.logger_configs = [DeyeLoggerConfig(1001, "10.0.0.1", 0, index=1)]
     with pytest.raises(StopIteration):
         plugin._get_logger_config(0)
+
+
+def test_process_keeps_logger_context_per_thread(plugin, mocker):
+    """Concurrent calls must not pair one logger's topic with the other's serial"""
+    plugin._config.logger_configs = [
+        DeyeLoggerConfig(1001, "10.0.0.1", 0, index=1),
+        DeyeLoggerConfig(1002, "10.0.0.2", 0, index=2),
+    ]
+    plugin._multi_inverter_logger_count = 2
+    plugin._logger_descriptions = {1: "A", 2: "B"}
+    plugin._mqtt_client.build_topic_name.side_effect = lambda idx, suffix: f"{idx}/{suffix}"
+    seen = []
+
+    def record(topic, _observation):
+        seen.append((int(topic.split("/")[0]), plugin._logger_serial))
+        time.sleep(0.001)
+
+    plugin.publish_sensor_information = record
+    sensor = mocker.MagicMock(mqtt_topic_suffix="day_energy")
+    events = [DeyeObservationEvent(Observation(sensor, datetime.now(), 1.0))] * 20
+    threads = [
+        threading.Thread(target=plugin.process, args=(DeyeEventList(events, logger_index=idx),)) for idx in (1, 2)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert len(seen) == 40
+    assert all(serial == 1000 + idx for idx, serial in seen)
