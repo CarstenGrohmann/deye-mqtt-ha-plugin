@@ -29,7 +29,7 @@ import pytest
 from deye_config import DeyeLoggerConfig
 from deye_events import DeyeEventList, DeyeObservationEvent
 from deye_observation import Observation
-from deye_plugin_ha_discovery import DeyeHADiscovery
+from deye_plugin_ha_discovery import DeyeHADiscovery, DeyeLoggerDiscovery
 
 
 @pytest.mark.parametrize(
@@ -188,7 +188,8 @@ def plugin(mocker):
     ],
 )
 def test_send_discovery_message_maps_unit_to_home_assistant(plugin, device_class, unit, expected):
-    plugin._send_discovery_message("name", "topic", state_topic="state", device_class=device_class, unit=unit)
+    worker = DeyeLoggerDiscovery(plugin, DeyeLoggerConfig(1001, "10.0.0.1", 0))
+    worker._send_discovery_message("name", "topic", state_topic="state", device_class=device_class, unit=unit)
     _discovery_topic, payload = plugin._mqtt_client.publish.call_args.args
     assert json.loads(payload)["unit_of_measurement"] == expected
 
@@ -213,7 +214,7 @@ def test_get_logger_config_unknown_index_raises(plugin):
 
 
 def test_process_keeps_logger_context_per_thread(plugin, mocker):
-    """Concurrent calls must not pair one logger's topic with the other's serial"""
+    """Concurrent calls must not pair one logger's state topic with the other's serial"""
     plugin._config.logger_configs = [
         DeyeLoggerConfig(1001, "10.0.0.1", 0, index=1),
         DeyeLoggerConfig(1002, "10.0.0.2", 0, index=2),
@@ -221,14 +222,15 @@ def test_process_keeps_logger_context_per_thread(plugin, mocker):
     plugin._multi_inverter_logger_count = 2
     plugin._logger_descriptions = {1: "A", 2: "B"}
     plugin._mqtt_client.build_topic_name.side_effect = lambda idx, suffix: f"{idx}/{suffix}"
-    seen = []
+    payloads = []
 
-    def record(topic, _observation):
-        seen.append((int(topic.split("/")[0]), plugin._logger_serial))
+    def publish(_topic, payload):
+        payloads.append(json.loads(payload))
         time.sleep(0.001)
 
-    plugin.publish_sensor_information = record
-    sensor = mocker.MagicMock(mqtt_topic_suffix="day_energy")
+    plugin._mqtt_client.publish.side_effect = publish
+    sensor = mocker.MagicMock(mqtt_topic_suffix="day_energy", unit="kWh")
+    sensor.name = "Day energy"
     events = [DeyeObservationEvent(Observation(sensor, datetime.now(), 1.0))] * 20
     threads = [
         threading.Thread(target=plugin.process, args=(DeyeEventList(events, logger_index=idx),)) for idx in (1, 2)
@@ -238,5 +240,9 @@ def test_process_keeps_logger_context_per_thread(plugin, mocker):
     for thread in threads:
         thread.join()
 
-    assert len(seen) == 40
-    assert all(serial == 1000 + idx for idx, serial in seen)
+    sensor_payloads = [p for p in payloads if p["state_topic"].endswith("/day_energy")]
+    assert len(sensor_payloads) == 40
+    for payload in sensor_payloads:
+        idx = int(payload["state_topic"].split("/")[0])
+        assert payload["device"]["serial_number"] == str(1000 + idx)
+        assert f"_{1000 + idx}_" in payload["unique_id"]

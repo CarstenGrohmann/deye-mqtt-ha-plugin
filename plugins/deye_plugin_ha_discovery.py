@@ -27,7 +27,6 @@ import functools
 import json
 import logging
 import re
-import threading
 from typing import Any
 
 from deye_config import DeyeConfig, DeyeEnv, DeyeLoggerConfig
@@ -37,7 +36,7 @@ from deye_observation import Observation
 from deye_plugin_loader import DeyePluginContext
 
 
-RELEASE_DATE = "2026-09-16"
+RELEASE_DATE = "2026-09-22"
 
 
 class DeyeHADiscovery(DeyeEventProcessor):
@@ -52,9 +51,6 @@ class DeyeHADiscovery(DeyeEventProcessor):
     _multi_inverter_data_aggregator_enabled: bool
     """Data aggregation enabled in multi-inverter mode"""
 
-    _device_name: str
-    """Device name shown in HA"""
-
     _ignore_topic_patterns: tuple[str, ...]
     """List of user-specific topics to be ignored"""
 
@@ -67,9 +63,6 @@ class DeyeHADiscovery(DeyeEventProcessor):
 
     _logger_descriptions: dict[int, str]
     """Logger descriptions, keyed by 1-based logger index"""
-
-    _logger_serial: int
-    """Logger (inverter) serial number"""
 
     _use_topic_in_unique_id: bool
     """Use MQTT topic instead of sensor name in unique_id"""
@@ -102,14 +95,11 @@ class DeyeHADiscovery(DeyeEventProcessor):
     _log: logging.Logger
     """Logger for this plugin"""
 
-    _logger_index: int
-    """index of the logger (inverter) currently being processed"""
-
     _mqtt_client: DeyeMqttClient
     """MQTT client for publishing discovery messages"""
 
-    _process_lock: threading.Lock
-    """Serializes process() calls from the logger threads"""
+    _workers: dict[int, "DeyeLoggerDiscovery"]
+    """Per-logger publishers, keyed by DeyeEventList.logger_index"""
 
     def __init__(self, plugin_context: DeyePluginContext):
         self.expire_after = None
@@ -120,18 +110,15 @@ class DeyeHADiscovery(DeyeEventProcessor):
             "DEYE_FEATURE_ACTIVE_POWER_REGULATION", False
         )
         self._config = plugin_context.config
-        self._device_name = ""
         self._log = logging.getLogger(DeyeHADiscovery.__name__)
         self._logger_descriptions = {}
-        self._logger_index = 0
-        self._logger_serial = 0
         self._ignore_topic_patterns = ()
         self._mqtt_client = plugin_context.mqtt_client
         self._multi_inverter_logger_count = 0
         self._multi_inverter_data_aggregator_enabled = False
-        self._process_lock = threading.Lock()
         self._sw_version = f"deye-inverter-mqtt with {self.get_id()}"
         self._use_topic_in_unique_id = False
+        self._workers = {}
 
     def initialize(self):
         super().initialize()
@@ -193,26 +180,6 @@ class DeyeHADiscovery(DeyeEventProcessor):
         res = res.replace("/", "_")
         res = res.strip()
         return res
-
-    def _get_unique_id(self, sensor_name: str, topic_name: str) -> str:
-        """Return a unique id for the current sensor"""
-        assert sensor_name or topic_name
-        if self._use_topic_in_unique_id:
-            prefix = self.component_prefix
-        else:
-            # Do not change the prefix, as a changed unique ID generates new sensors.
-            # The prefix differs from self.component_prefix = "deye_inverter_mqtt"
-            prefix = "deye_mqtt_inverter"
-        if (self._use_topic_in_unique_id and topic_name) or (
-            not sensor_name and topic_name
-        ):
-            component = topic_name
-        else:
-            component = sensor_name
-        _unique_id = f"{prefix}_{self._logger_serial}_{component}".lower()
-        _unique_id = _unique_id.replace(" ", "_")
-        _unique_id = _unique_id.replace("/", "_")
-        return _unique_id
 
     @staticmethod
     @functools.cache
@@ -375,10 +342,6 @@ class DeyeHADiscovery(DeyeEventProcessor):
         """Return the logger config matching DeyeEventList.logger_index"""
         return next(c for c in self._config.logger_configs if c.index == index)
 
-    def _get_logger_desc(self, idx: int) -> str:
-        """Return a description for the logger (1-based idx) for multi-inverter setups."""
-        return self._logger_descriptions.get(idx, f"SN {self._logger_serial}")
-
     @staticmethod
     @functools.cache
     def _get_state_class(topic: str) -> str:
@@ -464,6 +427,56 @@ class DeyeHADiscovery(DeyeEventProcessor):
             return "1", "0"
         return "True", "False"
 
+    def process(self, events: DeyeEventList):
+        """Create new HA discovery topics for all events"""
+        worker = self._workers.get(events.logger_index)
+        if worker is None:
+            # each key is only ever touched by its logger's own thread
+            worker = DeyeLoggerDiscovery(
+                self, self._get_logger_config(events.logger_index)
+            )
+            self._workers[events.logger_index] = worker
+        worker.process(events)
+
+
+class DeyeLoggerDiscovery:
+    """Publishes HA discovery messages for one logger (inverter)
+
+    The plugin instance is shared by all logger threads. Each logger gets
+    its own instance of this class with the logger config as construction
+    state, so no per-call state lives in the shared plugin.
+    """
+
+    _logger_config: DeyeLoggerConfig
+    """Logger this instance publishes for"""
+
+    _plugin: DeyeHADiscovery
+    """Shared configuration, MQTT client and topic mappings"""
+
+    def __init__(self, plugin: DeyeHADiscovery, logger_config: DeyeLoggerConfig):
+        self._logger_config = logger_config
+        self._plugin = plugin
+
+    def _get_unique_id(self, sensor_name: str, topic_name: str) -> str:
+        """Return a unique id for the current sensor"""
+        assert sensor_name or topic_name
+        if self._plugin._use_topic_in_unique_id:
+            prefix = self._plugin.component_prefix
+        else:
+            # Do not change the prefix, as a changed unique ID generates new sensors.
+            # The prefix differs from self._plugin.component_prefix = "deye_inverter_mqtt"
+            prefix = "deye_mqtt_inverter"
+        if (self._plugin._use_topic_in_unique_id and topic_name) or (
+            not sensor_name and topic_name
+        ):
+            component = topic_name
+        else:
+            component = sensor_name
+        _unique_id = f"{prefix}_{self._logger_config.serial_number}_{component}".lower()
+        _unique_id = _unique_id.replace(" ", "_")
+        _unique_id = _unique_id.replace("/", "_")
+        return _unique_id
+
     def _get_discovery_device_map_inverter(
         self, identifier: str
     ) -> dict[str, list[str] | str]:
@@ -474,11 +487,11 @@ class DeyeHADiscovery(DeyeEventProcessor):
         """
         return {
             "identifiers": [identifier],
-            "manufacturer": self.inverter_manufacturer,
-            "model": self.inverter_model,
-            "name": self._device_name,
-            "serial_number": str(self._logger_serial),
-            "sw_version": self._sw_version,
+            "manufacturer": self._plugin.inverter_manufacturer,
+            "model": self._plugin.inverter_model,
+            "name": self._get_device_name(),
+            "serial_number": str(self._logger_config.serial_number),
+            "sw_version": self._plugin._sw_version,
         }
 
     def _get_discovery_device_map_bridge(
@@ -491,18 +504,23 @@ class DeyeHADiscovery(DeyeEventProcessor):
         """
         return {
             "identifiers": [identifier],
-            "manufacturer": self.inverter_manufacturer,
+            "manufacturer": self._plugin.inverter_manufacturer,
             "model": "Status MQTT Bridge",
-            "name": self._device_name,
-            "sw_version": self._sw_version,
+            "name": self._get_device_name(),
+            "sw_version": self._plugin._sw_version,
         }
 
     def _fmt_sensor_name(self, sensor_name: str) -> str:
         """Format the sensor name to include in the HA discovery structure"""
-        return (
-            f"{sensor_name} ({self._logger_descriptions[self._logger_index]})"
-            if self._multi_inverter_logger_count
-            else sensor_name
+        if not self._plugin._multi_inverter_logger_count:
+            return sensor_name
+        desc = self._plugin._logger_descriptions[self._logger_config.index]
+        return f"{sensor_name} ({desc})"
+
+    def _get_device_name(self) -> str:
+        """Return the device name shown in HA"""
+        return self._fmt_sensor_name(
+            f"{self._plugin.inverter_manufacturer} Inverter MQTT"
         )
 
     def publish_sensor_information(self, topic: str, observation: Observation):
@@ -514,31 +532,31 @@ class DeyeHADiscovery(DeyeEventProcessor):
         """
         mqtt_topic_suffix = observation.sensor.mqtt_topic_suffix
         sensor_name = observation.sensor.name
-        node_id = f"{self.component_prefix}_{self._logger_serial}"
+        node_id = f"{self._plugin.component_prefix}_{self._logger_config.serial_number}"
 
-        device_class, platform = self._get_device_class(mqtt_topic_suffix)
+        device_class, platform = self._plugin._get_device_class(mqtt_topic_suffix)
 
         kwargs: dict[str, Any] = {
-            "availability_topic": f"{self._config.mqtt.topic_prefix}/status",
+            "availability_topic": f"{self._plugin._config.mqtt.topic_prefix}/status",
             "node_id": node_id,
             "unique_id": self._get_unique_id(sensor_name, mqtt_topic_suffix),
         }
 
-        if self.expire_after is not None:
-            kwargs["expire_after"] = self.expire_after
+        if self._plugin.expire_after is not None:
+            kwargs["expire_after"] = self._plugin.expire_after
 
-        value_template = self._get_value_template(mqtt_topic_suffix)
+        value_template = self._plugin._get_value_template(mqtt_topic_suffix)
         if value_template:
             kwargs["value_template"] = value_template
 
         if platform == "binary_sensor":
-            kwargs["payload_on"], kwargs["payload_off"] = self._get_payload_on_off(
-                mqtt_topic_suffix
+            kwargs["payload_on"], kwargs["payload_off"] = (
+                self._plugin._get_payload_on_off(mqtt_topic_suffix)
             )
         elif device_class == "enum":
-            kwargs["options"] = self._get_options(mqtt_topic_suffix)
+            kwargs["options"] = self._plugin._get_options(mqtt_topic_suffix)
         elif device_class and device_class != "timestamp":
-            kwargs["state_class"] = self._get_state_class(mqtt_topic_suffix)
+            kwargs["state_class"] = self._plugin._get_state_class(mqtt_topic_suffix)
             kwargs["unit"] = observation.sensor.unit
 
         self._send_discovery_message(
@@ -556,15 +574,15 @@ class DeyeHADiscovery(DeyeEventProcessor):
 
         Requires DEYE_FEATURE_ACTIVE_POWER_REGULATION=true.
         """
-        availability_topic = f"{self._config.mqtt.topic_prefix}/status"
-        command_topic = (
-            f"{self._config.mqtt.topic_prefix}/settings/active_power_regulation/command"
-        )
+        availability_topic = f"{self._plugin._config.mqtt.topic_prefix}/status"
+        command_topic = f"{self._plugin._config.mqtt.topic_prefix}/settings/active_power_regulation/command"
         state_topic = (
-            f"{self._config.mqtt.topic_prefix}/settings/active_power_regulation"
+            f"{self._plugin._config.mqtt.topic_prefix}/settings/active_power_regulation"
         )
-        node_id = f"{self.component_prefix}_{self._logger_serial}"
-        _device_class, platform = self._get_device_class("active_power_regulation")
+        node_id = f"{self._plugin.component_prefix}_{self._logger_config.serial_number}"
+        _device_class, platform = self._plugin._get_device_class(
+            "active_power_regulation"
+        )
         self._send_discovery_message(
             self._fmt_sensor_name("Active Power Regulation"),
             "active_power_regulation",
@@ -589,16 +607,16 @@ class DeyeHADiscovery(DeyeEventProcessor):
             ("Aggregated daily energy", "day_energy", "kWh"),
             ("Aggregated AC active power", "ac/active_power", "W"),
         ]:
-            device_class, platform = self._get_device_class(mqtt_topic_suffix)
+            device_class, platform = self._plugin._get_device_class(mqtt_topic_suffix)
             self._send_discovery_message(
                 sensor_name,
                 mqtt_topic_suffix,
-                state_topic=f"{self._config.mqtt.topic_prefix}/{mqtt_topic_suffix}",
+                state_topic=f"{self._plugin._config.mqtt.topic_prefix}/{mqtt_topic_suffix}",
                 platform=platform,
                 device_class=device_class,
-                state_class=self._get_state_class(mqtt_topic_suffix),
+                state_class=self._plugin._get_state_class(mqtt_topic_suffix),
                 unit=unit,
-                availability_topic=f"{self._config.mqtt.topic_prefix}/status",
+                availability_topic=f"{self._plugin._config.mqtt.topic_prefix}/status",
             )
 
     def publish_single_inverter_status(self):
@@ -607,15 +625,15 @@ class DeyeHADiscovery(DeyeEventProcessor):
             ("MQTT bridge", "application_status", "status"),
             ("Inverter logger", "logger_status", "logger_status"),
         ]:
-            device_class, platform = self._get_device_class(mqtt_topic_suffix)
+            device_class, platform = self._plugin._get_device_class(mqtt_topic_suffix)
             self._send_discovery_message(
                 self._fmt_sensor_name(sensor_name),
                 mqtt_topic_suffix,
-                state_topic=f"{self._config.mqtt.topic_prefix}/{state_topic}",
+                state_topic=f"{self._plugin._config.mqtt.topic_prefix}/{state_topic}",
                 platform=platform,
                 device_class=device_class,
                 entity_category="diagnostic",
-                node_id=f"{self.component_prefix}_{self._config.logger.serial_number}",
+                node_id=f"{self._plugin.component_prefix}_{self._plugin._config.logger.serial_number}",
                 payload_on="online",
                 payload_off="offline",
                 unique_id=self._get_unique_id("", mqtt_topic_suffix),
@@ -631,15 +649,15 @@ class DeyeHADiscovery(DeyeEventProcessor):
         all_states = [
             ("MQTT bridge", "application_status", "status"),
         ]
-        for i in range(1, self._multi_inverter_logger_count + 1):
-            desc = f"Logger ({self._get_logger_desc(i)})"
+        for i in range(1, self._plugin._multi_inverter_logger_count + 1):
+            desc = f"Logger ({self._plugin._logger_descriptions[i]})"
             all_states.append((desc, f"logger_status_{i}", f"{i}/logger_status"))
         for sensor_name, mqtt_topic_suffix, state_topic in all_states:
-            device_class, platform = self._get_device_class(mqtt_topic_suffix)
+            device_class, platform = self._plugin._get_device_class(mqtt_topic_suffix)
             self._send_discovery_message(
                 sensor_name,
                 mqtt_topic_suffix,
-                state_topic=f"{self._config.mqtt.topic_prefix}/{state_topic}",
+                state_topic=f"{self._plugin._config.mqtt.topic_prefix}/{state_topic}",
                 platform=platform,
                 device_class=device_class,
                 entity_category="diagnostic",
@@ -663,31 +681,31 @@ class DeyeHADiscovery(DeyeEventProcessor):
         the rest is passed through to the payload verbatim.
         device_type selects the device map: "inverter" or "bridge" (default).
         """
-        self._log.debug("Create HA discovery for %s", mqtt_topic_suffix)
+        self._plugin._log.debug("Create HA discovery for %s", mqtt_topic_suffix)
 
         if not device_class and platform == "sensor":
-            self._log.error(
+            self._plugin._log.error(
                 "Unable to determine device_class for topic %s on platform %s",
                 mqtt_topic_suffix,
                 platform,
             )
             return
 
-        node_id = kwargs.pop("node_id", self.component_prefix)
-        object_id = self._topic_to_object_id(mqtt_topic_suffix)
+        node_id = kwargs.pop("node_id", self._plugin.component_prefix)
+        object_id = self._plugin._topic_to_object_id(mqtt_topic_suffix)
         unique_id = kwargs.pop("unique_id", object_id)
         if device_type == "bridge":
-            identifier = f"{self.component_prefix}_bridge"
+            identifier = f"{self._plugin.component_prefix}_bridge"
             device = self._get_discovery_device_map_bridge(identifier)
         else:
-            identifier = f"{self.component_prefix}_{self._logger_serial}"
+            identifier = (
+                f"{self._plugin.component_prefix}_{self._logger_config.serial_number}"
+            )
             device = self._get_discovery_device_map_inverter(identifier)
 
         # discovery topic format:
         # <discovery_prefix>/<component>/[<node_id>/]<object_id>/config
-        discovery_topic = (
-            f"{self.ha_discovery_prefix}/{platform}/{node_id}/{object_id}/config"
-        )
+        discovery_topic = f"{self._plugin.ha_discovery_prefix}/{platform}/{node_id}/{object_id}/config"
 
         discovery_config = {
             "name": sensor_name,
@@ -715,38 +733,26 @@ class DeyeHADiscovery(DeyeEventProcessor):
         discovery_config.update(kwargs)
 
         payload = json.dumps(discovery_config)
-        self._mqtt_client.publish(discovery_topic, payload)
+        self._plugin._mqtt_client.publish(discovery_topic, payload)
 
     def process(self, events: DeyeEventList):
-        """Create new HA discovery topics for all events"""
-        # One instance serves all logger threads and keeps the logger context
-        # in self; concurrent calls mix serial number and state topic.
-        with self._process_lock:
-            self._process_events(events)
-
-    def _process_events(self, events: DeyeEventList):
-        _logger_index = events.logger_index
-        self._logger_index = _logger_index
-        self._logger_serial = self._get_logger_config(_logger_index).serial_number
-        self._log.info(
+        """Publish discovery messages for all events of this logger"""
+        self._plugin._log.info(
             "Processing events from logger: %s, SN:%s",
-            _logger_index,
-            self._logger_serial,
-        )
-        self._device_name = self._fmt_sensor_name(
-            f"{self.inverter_manufacturer} Inverter MQTT"
+            self._logger_config.index,
+            self._logger_config.serial_number,
         )
 
         # publish status and aggregated data only once for all inverters
-        if self._multi_inverter_logger_count == _logger_index:
-            if self._multi_inverter_logger_count:
+        if self._plugin._multi_inverter_logger_count == self._logger_config.index:
+            if self._plugin._multi_inverter_logger_count:
                 self.publish_multi_inverter_status()
-                if self._multi_inverter_data_aggregator_enabled:
+                if self._plugin._multi_inverter_data_aggregator_enabled:
                     self.publish_multi_inverter_data_aggregator()
             else:
                 self.publish_single_inverter_status()
 
-        if self._active_power_regulation_enabled:
+        if self._plugin._active_power_regulation_enabled:
             self.publish_active_power_regulation()
 
         event: DeyeObservationEvent
@@ -757,14 +763,14 @@ class DeyeHADiscovery(DeyeEventProcessor):
             if not event.observation.sensor.mqtt_topic_suffix:
                 continue
 
-            if self._ignore_topic(
+            if self._plugin._ignore_topic(
                 event.observation.sensor.mqtt_topic_suffix,
-                self._ignore_topic_patterns,
+                self._plugin._ignore_topic_patterns,
             ):
                 continue
 
-            topic = self._mqtt_client.build_topic_name(
-                _logger_index, event.observation.sensor.mqtt_topic_suffix
+            topic = self._plugin._mqtt_client.build_topic_name(
+                self._logger_config.index, event.observation.sensor.mqtt_topic_suffix
             )
             self.publish_sensor_information(topic, event.observation)
 

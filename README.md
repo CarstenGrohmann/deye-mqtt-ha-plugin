@@ -183,6 +183,9 @@ venv/bin/pytest
 
 ## Changelog
 
+### 2026-09-22
+* Replace the discovery lock with one publisher object per logger
+
 ### 2026-09-20
 * Fix threading issue in multi-inverter setups that corrupts energy totals and statistics derived from them
 
